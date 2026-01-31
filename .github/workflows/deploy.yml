@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    paths:
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - 'go.mod'
+      - 'go.sum'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'web/**'
+      - '.github/workflows/deploy.yml'
 
 env:
   REGISTRY: docker.io
