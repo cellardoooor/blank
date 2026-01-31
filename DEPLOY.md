@@ -17,13 +17,15 @@
 
 В репозитории Settings → Secrets and variables → Actions:
 
+**Docker Hub:**
 - `DOCKERHUB_USERNAME` - ваш username на Docker Hub (`cellardooor`)
 - `DOCKERHUB_TOKEN` - Access Token из Docker Hub (Settings → Security)
 
-Создать Docker Hub token:
-```bash
-# Docker Hub → Account Settings → Security → New Access Token
-```
+**Yandex Cloud:**
+- `YC_TOKEN` - OAuth токен для Terraform
+- `YC_S3_ACCESS_KEY` - Service Account access key для Object Storage
+- `YC_S3_SECRET_KEY` - Service Account secret key для Object Storage
+- `TF_STATE_BUCKET` - имя bucket для Terraform state (например: `terraform-state-messenger`)
 
 ### 2. Получение YC_TOKEN
 
@@ -44,53 +46,91 @@ exec -l $SHELL
 yc iam create-token
 ```
 
-### 3. Настройка Terraform
+### 3. Настройка S3 Backend для Terraform State
+
+Создание Service Account и ключей для Object Storage:
+
+```bash
+# Создать service account
+yc iam service-account create --name terraform-sa
+
+# Назначить роли
+yc resource-manager folder add-access-binding b1gdnf54t05a11qn56sa \
+  --role storage.editor \
+  --subject serviceAccount:$(yc iam service-account get terraform-sa --format=json | jq -r '.id')
+
+# Создать static access keys
+yc iam access-key create --service-account-name terraform-sa
+
+# Создать bucket для state
+yc storage bucket create --name terraform-state-messenger
+```
+
+### 4. Настройка Terraform
 
 ```bash
 cd terraform/envs/dev
 cp terraform.tfvars.example terraform.tfvars
 
-# Файл уже содержит:
-# - yc_cloud_id = "b1gii3452auiela08s8k"
-# - yc_folder_id = "b1gdnf54t05a11qn56sa"
-# - docker_image = "cellardooor/blank:latest"
-# 
-# Нужно заполнить только:
+# Заполнить:
 # - yc_token (полученный выше)
-# - JWT_SECRET и другие sensitive переменные
+# - JWT_SECRET и другие sensitive переменные в app_env
 ```
 
-### 4. Деплой инфраструктуры
+### 5. Локальный деплой
 
 ```bash
 cd terraform/envs/dev
-terraform init
+
+# Инициализация с backend (для локальной работы)
+terraform init \
+  -backend-config="endpoints={s3=\"https://storage.yandexcloud.net\"}" \
+  -backend-config="bucket=terraform-state-messenger" \
+  -backend-config="region=ru-central1" \
+  -backend-config="key=dev/terraform.tfstate" \
+  -backend-config="access_key=YOUR_ACCESS_KEY" \
+  -backend-config="secret_key=YOUR_SECRET_KEY" \
+  -backend-config="skip_region_validation=true" \
+  -backend-config="skip_credentials_validation=true" \
+  -backend-config="skip_requesting_account_id=true" \
+  -backend-config="skip_metadata_api_check=true"
+
 terraform plan
 terraform apply
-
-# Вывод: public_ip адрес сервера
 ```
 
-### 5. Деплой новой версии приложения
+## CI/CD Pipeline
 
-**Вариант 1: Новый образ → новая VM (рекомендуется)**
+При push в `main`:
+
+1. **Build job**:
+   - Собирает Docker образ
+   - Пушит в `cellardooor/blank:<tag>` и `cellardooor/blank:latest`
+
+2. **Deploy job**:
+   - Инициализирует Terraform с S3 backend через secrets
+   - Запускает `terraform plan`
+   - При merge в `main`: `terraform apply -auto-approve`
+
+### Ручной запуск деплоя
 
 ```bash
-# После push в main (GitHub Actions соберёт и запушит образ)
+# Новая версия = новая VM
 terraform taint module.compute.yandex_compute_instance.main
 terraform apply
-```
 
-**Вариант 2: Перезапуск на существующей VM (ручной)**
-
-```bash
-# Через Yandex Cloud Serial Console
+# Или обновить образ на существующей VM
 yc compute connect-to-serial-port $(yc compute instance list --format=json | jq -r '.[0].id')
-
-# На VM:
 sudo docker pull cellardooor/blank:latest
 sudo systemctl restart messenger-app
 ```
+
+## Terraform State
+
+State хранится в **Yandex Object Storage (S3)**:
+- **Bucket**: `terraform-state-messenger` (или твой из `TF_STATE_BUCKET`)
+- **Key**: `dev/terraform.tfstate`
+- **Credentials**: передаются через CI/CD secrets или при локальной инициализации
 
 ## Структура проекта
 
@@ -106,6 +146,7 @@ sudo systemctl restart messenger-app
 │   ├── compute/          # VM с cloud-init
 │   └── envs/dev/         # Dev окружение
 └── .github/workflows/    # CI/CD
+    ├── deploy.yml        # Build + Deploy pipeline
 ```
 
 ## Переменные окружения приложения
@@ -122,33 +163,13 @@ sudo systemctl restart messenger-app
 | `DB_NAME` | Database name | `messenger` |
 | `DB_SSLMODE` | SSL mode | `disable` |
 
-## Обновление приложения
-
-При пуше в `main` или создании тега `v*`, GitHub Actions:
-1. Собирает Docker образ
-2. Пушит в `cellardooor/blank:<tag>`
-
-Для обновления на сервере:
-
-```bash
-# Вариант A: Пересоздание VM (рекомендуется для immutable инфраструктуры)
-terraform taint module.compute.yandex_compute_instance.main
-terraform apply
-
-# Вариант B: Pull нового образа на существующей VM
-yc compute connect-to-serial-port <instance_id>
-# На VM:
-sudo docker pull cellardooor/blank:latest
-sudo systemctl restart messenger-app
-```
-
 ## Доступ к приложению
 
 - API: `http://<public_ip>:8080`
 - Web UI: `http://<public_ip>:8080`
 - WebSocket: `ws://<public_ip>:8080/ws`
 
-## Учетные данные Yandex Cloud (pre-filled)
+## Учетные данные Yandex Cloud
 
 ```
 cloud_id:  b1gii3452auiela08s8k
