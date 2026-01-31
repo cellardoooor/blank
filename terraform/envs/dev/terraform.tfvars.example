@@ -1,0 +1,20 @@
+# Yandex Cloud Credentials
+yc_cloud_id  = "YOUR_CLOUD_ID"
+yc_folder_id = "YOUR_FOLDER_ID"
+yc_token     = "YOUR_YC_OAUTH_TOKEN_HERE"
+
+# Docker Image
+docker_image = "cellardooor/blank:latest"
+
+# Application Configuration
+app_env = {
+  HTTP_ADDR    = ":8080"
+  JWT_SECRET   = "change-this-secret"
+  JWT_DURATION = "24h"
+  DB_HOST      = "localhost"
+  DB_PORT      = "5432"
+  DB_USER      = "messenger"
+  DB_PASSWORD  = "messenger"
+  DB_NAME      = "messenger"
+  DB_SSLMODE   = "disable"
+}

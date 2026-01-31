@@ -1,0 +1,57 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - git
+
+runcmd:
+  # Install Docker
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  - chmod a+r /etc/apt/keyrings/docker.gpg
+  - echo "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" > /etc/apt/sources.list.d/docker.list
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  - systemctl start docker
+  - systemctl enable docker
+  - usermod -aG docker ubuntu
+
+  # Pull and run application container
+  - docker pull ${docker_image}
+  
+  # Create systemd service for the application
+  - |
+    cat > /etc/systemd/system/${container_name}.service << 'EOF'
+    [Unit]
+    Description=Messenger Application Container
+    Requires=docker.service
+    After=docker.service
+
+    [Service]
+    Restart=always
+    RestartSec=5
+    ExecStartPre=-/usr/bin/docker rm -f ${container_name}
+    ExecStartPre=/usr/bin/docker pull ${docker_image}
+    ExecStart=/usr/bin/docker run \
+      --name ${container_name} \
+      --rm \
+      -p ${app_port}:${app_port} \
+      ${docker_env} \
+      ${docker_image}
+    ExecStop=/usr/bin/docker stop -t 30 ${container_name}
+    ExecStopPost=-/usr/bin/docker rm -f ${container_name}
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+
+  # Reload and start service
+  - systemctl daemon-reload
+  - systemctl enable ${container_name}
+  - systemctl start ${container_name}
