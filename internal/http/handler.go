@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"messenger/internal/auth"
-	"messenger/internal/model"
 	"messenger/internal/service"
 )
 
