@@ -55,7 +55,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          no-cache: true
 
   deploy:
     needs: build
@@ -81,7 +80,6 @@ jobs:
             -backend-config="secret_key=${{ secrets.YC_S3_SECRET_KEY }}" \
             -backend-config="skip_region_validation=true" \
             -backend-config="skip_credentials_validation=true" \
-            -backend-config="skip_requesting_account_id=true" \
             -backend-config="skip_metadata_api_check=true"
 
       - name: Terraform Plan
