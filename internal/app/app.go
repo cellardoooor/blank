@@ -9,6 +9,7 @@ import (
 	"messenger/internal/config"
 	httphandlers "messenger/internal/http"
 	"messenger/internal/service"
+	"messenger/internal/storage"
 	"messenger/internal/storage/postgres"
 	"messenger/internal/ws"
 )
