@@ -29,25 +29,25 @@ func New(cfg *config.Config) *App {
 
 func (a *App) Init(ctx context.Context) error {
 	// Try to connect to database, but don't fail if unavailable
-	storage, err := postgres.New(a.config.DB.DSN())
+	pgStorage, err := postgres.New(a.config.DB.DSN())
 	if err != nil {
 		log.Printf("warning: database connection failed: %v", err)
 		log.Println("application starting without database - some features unavailable")
-	} else if err := storage.Ping(ctx); err != nil {
-		storage.Close()
+	} else if err := pgStorage.Ping(ctx); err != nil {
+		pgStorage.Close()
 		log.Printf("warning: database ping failed: %v", err)
 		log.Println("application starting without database - some features unavailable")
 	} else {
-		a.storage = storage
+		a.storage = pgStorage
 		log.Println("database connected")
 	}
 
 	// Initialize services with storage (may be nil)
 	var userRepo storage.UserRepository
 	var messageRepo storage.MessageRepository
-	if a.storage != nil {
-		userRepo = a.storage.User()
-		messageRepo = a.storage.Message()
+	if pgStorage != nil {
+		userRepo = pgStorage.User()
+		messageRepo = pgStorage.Message()
 	}
 
 	authService := auth.NewService(userRepo, a.config.JWTSecret, a.config.JWTDuration)
