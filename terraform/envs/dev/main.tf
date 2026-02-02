@@ -1,10 +1,6 @@
 module "network" {
   source = "../../network"
 
-  providers = {
-    yandex = yandex
-  }
-
   vpc_name            = "${var.environment}-messenger-vpc"
   vpc_cidr            = "10.0.0.0/16"
   subnet_name         = "${var.environment}-messenger-subnet"
@@ -15,10 +11,6 @@ module "network" {
 
 module "compute" {
   source = "../../compute"
-
-  providers = {
-    yandex = yandex
-  }
 
   instance_name      = "${var.environment}-messenger-backend"
   zone               = var.zone
