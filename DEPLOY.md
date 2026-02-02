@@ -176,7 +176,12 @@ terraform init \
   -backend-config="skip_requesting_account_id=true"
 
 terraform plan
-terraform apply
+
+# Для пересоздания VM (новый Docker образ + чистое состояние):
+terraform apply -replace="module.compute.yandex_compute_instance.main"
+
+# Или просто обновить без пересоздания:
+# terraform apply
 ```
 
 ## CI/CD Pipeline
@@ -189,11 +194,9 @@ terraform apply
 
 2. **Deploy job**:
    - Инициализирует Terraform с S3 backend
-   - Передаёт переменные через `TF_VAR_*`:
-     - Из **Secrets**: `yc_token`, `docker_image`, `app_env`
-     - Из **Variables**: `yc_cloud_id`, `yc_folder_id`
-   - Запускает `terraform plan`
-   - При merge в `main`: `terraform apply -auto-approve`
+   - Передаёт переменные через `TF_VAR_*` из GitHub Secrets/Variables
+   - **Пересоздаёт VM** (Immutable Infrastructure approach) - новая VM с чистым состоянием
+   - Запускает `terraform plan` и `terraform apply -replace`
 
 ### Ручной запуск деплоя
 
