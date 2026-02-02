@@ -4,13 +4,21 @@ data "yandex_compute_image" "ubuntu" {
 
 locals {
   docker_env = join(" ", [
-    for k, v in var.app_env : "-e ${k}=\"${v}\""
+    "-e HTTP_ADDR=\"${var.http_addr}\"",
+    "-e JWT_SECRET=\"${var.jwt_secret}\"",
+    "-e JWT_DURATION=\"${var.jwt_duration}\"",
+    "-e DB_HOST=\"${var.db_host}\"",
+    "-e DB_PORT=\"${var.db_port}\"",
+    "-e DB_USER=\"${var.db_user}\"",
+    "-e DB_PASSWORD=\"${var.db_password}\"",
+    "-e DB_NAME=\"${var.db_name}\"",
+    "-e DB_SSLMODE=\"${var.db_sslmode}\""
   ])
 
   cloud_init = templatefile("${path.module}/cloud_init.yaml", {
     docker_image   = var.docker_image
     container_name = var.container_name
-    docker_env     = local.docker_env != "" ? local.docker_env : ""
+    docker_env     = local.docker_env
     app_port       = var.app_port
   })
 }

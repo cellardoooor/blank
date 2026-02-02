@@ -100,11 +100,19 @@ GitHub Actions automatically builds and pushes Docker image on push to `main`.
 - `YC_TOKEN` - Yandex Cloud OAuth token
 - `YC_S3_ACCESS_KEY` / `YC_S3_SECRET_KEY` - S3 backend credentials
 - `TF_STATE_BUCKET` - S3 bucket name for Terraform state
-- `APP_ENV` - JSON string with application environment variables (JWT_SECRET, DB_PASSWORD, etc.)
+- `JWT_SECRET` - JWT signing secret (generate with `openssl rand -base64 32`)
+- `DB_PASSWORD` - PostgreSQL password
 
 **Required Variables (non-sensitive):**
 - `YC_CLOUD_ID` - Yandex Cloud ID
 - `YC_FOLDER_ID` - Yandex Folder ID
+- `HTTP_ADDR` - Server bind address (default: `:8080`)
+- `JWT_DURATION` - Token lifetime (default: `24h`)
+- `DB_HOST` - Database host (default: `localhost`)
+- `DB_PORT` - Database port (default: `5432`)
+- `DB_USER` - Database user (default: `messenger`)
+- `DB_NAME` - Database name (default: `messenger`)
+- `DB_SSLMODE` - SSL mode (default: `disable`)
 
 ## Environment Variables
 

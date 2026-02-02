@@ -30,6 +30,15 @@ module "compute" {
 
   docker_image   = var.docker_image
   container_name = var.container_name
-  app_env        = var.app_env
   app_port       = var.app_port
+
+  jwt_secret   = var.jwt_secret
+  db_password  = var.db_password
+  http_addr    = var.http_addr
+  jwt_duration = var.jwt_duration
+  db_host      = var.db_host
+  db_port      = var.db_port
+  db_user      = var.db_user
+  db_name      = var.db_name
+  db_sslmode   = var.db_sslmode
 }

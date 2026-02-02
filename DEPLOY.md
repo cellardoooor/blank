@@ -27,14 +27,22 @@
 | `YC_S3_ACCESS_KEY` | Access key для S3 backend | См. раздел [Создание S3 ключей](#3-создание-s3-ключей-для-terraform-state) |
 | `YC_S3_SECRET_KEY` | Secret key для S3 backend | См. раздел [Создание S3 ключей](#3-создание-s3-ключей-для-terraform-state) |
 | `TF_STATE_BUCKET` | Имя S3 bucket для state | Придумай любое уникальное имя (например: `terraform-state-messenger-xyz`) |
-| `APP_ENV` | JSON с конфигом приложения | См. раздел [Конфигурация приложения](#4-конфигурация-приложения) |
+| `JWT_SECRET` | Секретный ключ для JWT токенов | `openssl rand -base64 32` |
+| `DB_PASSWORD` | Пароль для PostgreSQL | Придумай сильный пароль (минимум 12 символов) |
 
 #### GitHub Variables (открытые значения)
 
-| Переменная | Зачем нужна | Где взять |
-|------------|-------------|-----------|
-| `YC_CLOUD_ID` | ID облака Yandex | См. раздел [Получение Cloud/Folder ID](#получение-cloud_id-и-folder_id) |
-| `YC_FOLDER_ID` | ID каталога Yandex | См. раздел [Получение Cloud/Folder ID](#получение-cloud_id-и-folder_id) |
+| Переменная | Зачем нужна | Где взять | Значение по умолчанию |
+|------------|-------------|-----------|----------------------|
+| `YC_CLOUD_ID` | ID облака Yandex | См. раздел [Получение Cloud/Folder ID](#получение-cloud_id-и-folder_id) | - |
+| `YC_FOLDER_ID` | ID каталога Yandex | См. раздел [Получение Cloud/Folder ID](#получение-cloud_id-и-folder_id) | - |
+| `HTTP_ADDR` | Порт приложения | Можно оставить по умолчанию | `:8080` |
+| `JWT_DURATION` | Время жизни токена | Можно оставить по умолчанию | `24h` |
+| `DB_HOST` | Хост базы данных | Можно оставить по умолчанию | `localhost` |
+| `DB_PORT` | Порт PostgreSQL | Можно оставить по умолчанию | `5432` |
+| `DB_USER` | Пользователь БД | Можно оставить по умолчанию | `messenger` |
+| `DB_NAME` | Имя базы данных | Можно оставить по умолчанию | `messenger` |
+| `DB_SSLMODE` | Режим SSL | Можно оставить по умолчанию | `disable` |
 
 ### 2. Получение YC_TOKEN
 
@@ -109,20 +117,27 @@ yc storage bucket create --name <UNIQUE_BUCKET_NAME>
 - `YC_S3_SECRET_KEY` = secret из вывода команды
 - `TF_STATE_BUCKET` = имя bucket'а которое придумал
 
-### 4. Конфигурация приложения
+### 4. Генерация секретов приложения
 
-Создай JSON-строку для `APP_ENV` секрета. Можно через CLI:
+Для работы приложения нужны два секрета:
 
+**1. JWT_SECRET** - ключ для подписи JWT токенов:
 ```bash
-# Создать JSON конфиг
-jq -n \
-  --arg jwt_secret "$(openssl rand -base64 32)" \
-  '{HTTP_ADDR: ":8080", JWT_SECRET: $jwt_secret, JWT_DURATION: "24h", DB_HOST: "localhost", DB_PORT: "5432", DB_USER: "messenger", DB_PASSWORD: "messenger", DB_NAME: "messenger", DB_SSLMODE: "disable"}'
+openssl rand -base64 32
 ```
+Сохрани результат в GitHub Secret `JWT_SECRET`.
 
-Результат сохрани в секрет `APP_ENV`.
+**2. DB_PASSWORD** - пароль для PostgreSQL:
+Придумай сильный пароль (минимум 12 символов, буквы, цифры, спецсимволы) и сохрани в GitHub Secret `DB_PASSWORD`.
 
-**Важно:** `JWT_SECRET` должен быть длинным случайным значением (минимум 32 символа).
+**Переменные по умолчанию** (можно не задавать, будут использованы значения из таблицы выше):
+- `HTTP_ADDR=:8080`
+- `JWT_DURATION=24h`
+- `DB_HOST=localhost`
+- `DB_PORT=5432`
+- `DB_USER=messenger`
+- `DB_NAME=messenger`
+- `DB_SSLMODE=disable`
 
 ## Локальная разработка (опционально)
 
@@ -136,7 +151,8 @@ cp terraform.tfvars.example terraform.tfvars
 # - yc_cloud_id, yc_folder_id (из раздела выше)
 # - yc_token (из раздела 2)
 # - docker_image (например: cellardooor/blank:latest)
-# - app_env (JSON как в секрете APP_ENV)
+# - jwt_secret, db_password (из раздела 4)
+# - http_addr, jwt_duration, db_host, db_port, db_user, db_name, db_sslmode (опционально)
 ```
 
 **CI/CD не использует terraform.tfvars** — все значения берутся из GitHub Secrets/Variables.
