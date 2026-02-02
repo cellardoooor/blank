@@ -97,6 +97,10 @@ jobs:
             -backend-config="skip_metadata_api_check=true" \
             -backend-config="skip_requesting_account_id=true"
 
+      - name: Update Terraform modules
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform get -update
+
       - name: Terraform Plan
         working-directory: ${{ env.TF_ROOT }}
         env:
