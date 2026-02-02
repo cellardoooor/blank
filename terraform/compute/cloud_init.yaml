@@ -11,6 +11,41 @@ packages:
   - git
 
 write_files:
+  - path: /opt/messenger/env.sh
+    permissions: '0600'
+    owner: root:root
+    content: |
+      HTTP_ADDR="${http_addr}"
+      JWT_SECRET="${jwt_secret}"
+      JWT_DURATION="${jwt_duration}"
+      DB_HOST="${db_host}"
+      DB_PORT="${db_port}"
+      DB_USER="${db_user}"
+      DB_PASSWORD="${db_password}"
+      DB_NAME="${db_name}"
+      DB_SSLMODE="${db_sslmode}"
+
+  - path: /opt/messenger/start.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/bin/bash
+      source /opt/messenger/env.sh
+      /usr/bin/docker run \
+        --name messenger-app \
+        --rm \
+        -p ${app_port}:${app_port} \
+        -e HTTP_ADDR="$HTTP_ADDR" \
+        -e JWT_SECRET="$JWT_SECRET" \
+        -e JWT_DURATION="$JWT_DURATION" \
+        -e DB_HOST="$DB_HOST" \
+        -e DB_PORT="$DB_PORT" \
+        -e DB_USER="$DB_USER" \
+        -e DB_PASSWORD="$DB_PASSWORD" \
+        -e DB_NAME="$DB_NAME" \
+        -e DB_SSLMODE="$DB_SSLMODE" \
+        ${docker_image}
+
   - path: /etc/systemd/system/messenger-app.service
     permissions: '0644'
     content: |
@@ -20,16 +55,12 @@ write_files:
       After=docker.service
 
       [Service]
+      Type=simple
       Restart=always
       RestartSec=5
       ExecStartPre=-/usr/bin/docker rm -f messenger-app
       ExecStartPre=/usr/bin/docker pull ${docker_image}
-      ExecStart=/usr/bin/docker run \
-        --name messenger-app \
-        --rm \
-        -p ${app_port}:${app_port} \
-        ${docker_env} \
-        ${docker_image}
+      ExecStart=/opt/messenger/start.sh
       ExecStop=/usr/bin/docker stop -t 30 messenger-app
       ExecStopPost=-/usr/bin/docker rm -f messenger-app
 
