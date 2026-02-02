@@ -27,31 +27,31 @@ runcmd:
   
   # Create systemd service for the application
   - |
-    cat > /etc/systemd/system/${container_name}.service << 'EOF'
-    [Unit]
-    Description=Messenger Application Container
-    Requires=docker.service
-    After=docker.service
+    cat > /etc/systemd/system/messenger-app.service << EOF
+[Unit]
+Description=Messenger Application Container
+Requires=docker.service
+After=docker.service
 
-    [Service]
-    Restart=always
-    RestartSec=5
-    ExecStartPre=-/usr/bin/docker rm -f ${container_name}
-    ExecStartPre=/usr/bin/docker pull ${docker_image}
-    ExecStart=/usr/bin/docker run \
-      --name ${container_name} \
-      --rm \
-      -p ${app_port}:${app_port} \
-      ${docker_env} \
-      ${docker_image}
-    ExecStop=/usr/bin/docker stop -t 30 ${container_name}
-    ExecStopPost=-/usr/bin/docker rm -f ${container_name}
+[Service]
+Restart=always
+RestartSec=5
+ExecStartPre=-/usr/bin/docker rm -f messenger-app
+ExecStartPre=/usr/bin/docker pull ${docker_image}
+ExecStart=/usr/bin/docker run \
+  --name messenger-app \
+  --rm \
+  -p ${app_port}:${app_port} \
+  ${docker_env} \
+  ${docker_image}
+ExecStop=/usr/bin/docker stop -t 30 messenger-app
+ExecStopPost=-/usr/bin/docker rm -f messenger-app
 
-    [Install]
-    WantedBy=multi-user.target
-    EOF
+[Install]
+WantedBy=multi-user.target
+EOF
 
   # Reload and start service
   - systemctl daemon-reload
-  - systemctl enable ${container_name}
-  - systemctl start ${container_name}
+  - systemctl enable messenger-app
+  - systemctl start messenger-app
