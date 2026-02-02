@@ -22,6 +22,10 @@ func NewMessageService(repo storage.MessageRepository, userRepo storage.UserRepo
 }
 
 func (s *MessageService) Send(ctx context.Context, senderID, receiverID uuid.UUID, payload []byte) (*model.Message, error) {
+	if s.userRepo == nil || s.repo == nil {
+		return nil, fmt.Errorf("database unavailable")
+	}
+
 	receiver, err := s.userRepo.GetByID(ctx, receiverID)
 	if err != nil {
 		return nil, err
@@ -45,6 +49,10 @@ func (s *MessageService) Send(ctx context.Context, senderID, receiverID uuid.UUI
 }
 
 func (s *MessageService) GetHistory(ctx context.Context, user1, user2 uuid.UUID, limit, offset int) ([]model.Message, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("database unavailable")
+	}
+
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}

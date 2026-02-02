@@ -13,9 +13,9 @@ import (
 )
 
 type Service struct {
-	userRepo     storage.UserRepository
-	jwtSecret    []byte
-	jwtDuration  time.Duration
+	userRepo    storage.UserRepository
+	jwtSecret   []byte
+	jwtDuration time.Duration
 }
 
 func NewService(userRepo storage.UserRepository, secret []byte, duration time.Duration) *Service {
@@ -71,6 +71,10 @@ func (s *Service) ValidateToken(tokenString string) (uuid.UUID, error) {
 }
 
 func (s *Service) Register(ctx context.Context, username, password string) (*model.User, error) {
+	if s.userRepo == nil {
+		return nil, fmt.Errorf("database unavailable")
+	}
+
 	existing, err := s.userRepo.GetByUsername(ctx, username)
 	if err != nil {
 		return nil, err
@@ -99,6 +103,10 @@ func (s *Service) Register(ctx context.Context, username, password string) (*mod
 }
 
 func (s *Service) Login(ctx context.Context, username, password string) (string, error) {
+	if s.userRepo == nil {
+		return "", fmt.Errorf("database unavailable")
+	}
+
 	user, err := s.userRepo.GetByUsername(ctx, username)
 	if err != nil {
 		return "", err
