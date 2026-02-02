@@ -42,10 +42,11 @@ func (a *App) Init(ctx context.Context) error {
 	}
 
 	// Initialize services with storage (may be nil)
-	var userRepo, messageRepo interface{}
+	var userRepo storage.UserRepository
+	var messageRepo storage.MessageRepository
 	if a.storage != nil {
-		userRepo = storage.User()
-		messageRepo = storage.Message()
+		userRepo = a.storage.User()
+		messageRepo = a.storage.Message()
 	}
 
 	authService := auth.NewService(userRepo, a.config.JWTSecret, a.config.JWTDuration)
