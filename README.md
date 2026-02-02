@@ -94,9 +94,17 @@ terraform apply
 
 GitHub Actions automatically builds and pushes Docker image on push to `main`.
 
-Required secrets:
+**Required Secrets:**
 - `DOCKERHUB_USERNAME` - your Docker Hub username
 - `DOCKERHUB_TOKEN` - Docker Hub access token
+- `YC_TOKEN` - Yandex Cloud OAuth token
+- `YC_S3_ACCESS_KEY` / `YC_S3_SECRET_KEY` - S3 backend credentials
+- `TF_STATE_BUCKET` - S3 bucket name for Terraform state
+- `APP_ENV` - JSON string with application environment variables (JWT_SECRET, DB_PASSWORD, etc.)
+
+**Required Variables (non-sensitive):**
+- `YC_CLOUD_ID` - Yandex Cloud ID
+- `YC_FOLDER_ID` - Yandex Folder ID
 
 ## Environment Variables
 

@@ -13,28 +13,37 @@
 
 ## Подготовка
 
-### 1. Настройка GitHub Secrets
+### 1. Настройка GitHub Secrets и Variables
 
-В репозитории Settings → Secrets and variables → Actions:
+В репозитории: **Settings → Secrets and variables → Actions**
 
-**Docker Hub:**
-- `DOCKERHUB_USERNAME` - ваш username на Docker Hub (`cellardooor`)
-- `DOCKERHUB_TOKEN` - Access Token из Docker Hub (Settings → Security)
+#### GitHub Secrets (защищённые значения)
 
-**Yandex Cloud:**
-- `YC_TOKEN` - OAuth токен для Terraform
-- `YC_S3_ACCESS_KEY` - Service Account access key для Object Storage
-- `YC_S3_SECRET_KEY` - Service Account secret key для Object Storage
-- `TF_STATE_BUCKET` - имя bucket для Terraform state (например: `terraform-state-messenger`)
+| Секрет | Зачем нужен | Где взять |
+|--------|-------------|-----------|
+| `DOCKERHUB_USERNAME` | Username для Docker Hub | Docker Hub → Account Settings |
+| `DOCKERHUB_TOKEN` | Токен для пуша образов | Docker Hub → Account Settings → Security → New Access Token |
+| `YC_TOKEN` | OAuth токен для Terraform | См. раздел [Получение YC_TOKEN](#2-получение-yctoken) |
+| `YC_S3_ACCESS_KEY` | Access key для S3 backend | См. раздел [Создание S3 ключей](#3-создание-s3-ключей-для-terraform-state) |
+| `YC_S3_SECRET_KEY` | Secret key для S3 backend | См. раздел [Создание S3 ключей](#3-создание-s3-ключей-для-terraform-state) |
+| `TF_STATE_BUCKET` | Имя S3 bucket для state | Придумай любое уникальное имя (например: `terraform-state-messenger-xyz`) |
+| `APP_ENV` | JSON с конфигом приложения | См. раздел [Конфигурация приложения](#4-конфигурация-приложения) |
+
+#### GitHub Variables (открытые значения)
+
+| Переменная | Зачем нужна | Где взять |
+|------------|-------------|-----------|
+| `YC_CLOUD_ID` | ID облака Yandex | См. раздел [Получение Cloud/Folder ID](#получение-cloud_id-и-folder_id) |
+| `YC_FOLDER_ID` | ID каталога Yandex | См. раздел [Получение Cloud/Folder ID](#получение-cloud_id-и-folder_id) |
 
 ### 2. Получение YC_TOKEN
 
-Для Terraform нужен OAuth token Yandex Cloud:
+OAuth токен для доступа Terraform к Yandex Cloud:
 
-**Способ 1: Через браузер**
+**Способ 1: Через браузер (быстрее)**
 1. Открыть: https://oauth.yandex.ru/authorize?response_type=token&client_id=1a6990aa636648e9b2ef855fa7bec454
 2. Войти в аккаунт Яндекс
-3. Скопировать токен из URL или страницы
+3. Скопировать токен из URL (`access_token=...`) или страницы
 
 **Способ 2: Через CLI**
 ```bash
@@ -46,50 +55,105 @@ exec -l $SHELL
 yc iam create-token
 ```
 
-### 3. Настройка S3 Backend для Terraform State
+### Получение CLOUD_ID и FOLDER_ID
 
-Создание Service Account и ключей для Object Storage:
+**Через Yandex Cloud Console:**
+1. Открыть https://console.cloud.yandex.ru
+2. Вверху страницы видно имя каталога - кликнуть на него
+3. В выпадающем меню будет ID каталога (это `YC_FOLDER_ID`)
+4. ID облака (`YC_CLOUD_ID`) можно найти в настройках облака (шестерёнка рядом с именем)
 
+**Через CLI:**
 ```bash
-# Создать service account
-yc iam service-account create --name terraform-sa
+# Получить Cloud ID
+yc config list | grep cloud-id
 
-# Назначить роли
-yc resource-manager folder add-access-binding b1gdnf54t05a11qn56sa \
-  --role storage.editor \
-  --subject serviceAccount:$(yc iam service-account get terraform-sa --format=json | jq -r '.id')
+# Получить Folder ID
+yc config list | grep folder-id
 
-# Создать static access keys
-yc iam access-key create --service-account-name terraform-sa
-
-# Создать bucket для state
-yc storage bucket create --name terraform-state-messenger
+# Или посмотреть все папки
+yc resource-manager folder list
 ```
 
-### 4. Настройка Terraform
+### 3. Создание S3 ключей для Terraform State
+
+Сначала нужен `YC_FOLDER_ID` (получить выше).
+
+```bash
+# 1. Создать Service Account для Terraform
+yc iam service-account create --name terraform-sa
+
+# 2. Получить ID сервисного аккаунта
+SA_ID=$(yc iam service-account get terraform-sa --format=json | jq -r '.id')
+
+# 3. Назначить роль storage.editor (нужен YC_FOLDER_ID)
+yc resource-manager folder add-access-binding <YC_FOLDER_ID> \
+  --role storage.editor \
+  --subject serviceAccount:$SA_ID
+
+# 4. Создать static access keys (сохрани вывод!)
+yc iam access-key create --service-account-name terraform-sa
+# Вывод будет:
+# access_key:
+#   id: ...
+#   key_id: YCAJE... (это YC_S3_ACCESS_KEY)
+# secret: YCPVG... (это YC_S3_SECRET_KEY)
+
+# 5. Создать bucket для Terraform state (имя должно быть уникальным глобально!)
+yc storage bucket create --name <UNIQUE_BUCKET_NAME>
+# Например: terraform-state-messenger-$(date +%s)
+```
+
+**Что сохранить в GitHub Secrets:**
+- `YC_S3_ACCESS_KEY` = key_id из вывода команды
+- `YC_S3_SECRET_KEY` = secret из вывода команды
+- `TF_STATE_BUCKET` = имя bucket'а которое придумал
+
+### 4. Конфигурация приложения
+
+Создай JSON-строку для `APP_ENV` секрета. Можно через CLI:
+
+```bash
+# Создать JSON конфиг
+jq -n \
+  --arg jwt_secret "$(openssl rand -base64 32)" \
+  '{HTTP_ADDR: ":8080", JWT_SECRET: $jwt_secret, JWT_DURATION: "24h", DB_HOST: "localhost", DB_PORT: "5432", DB_USER: "messenger", DB_PASSWORD: "messenger", DB_NAME: "messenger", DB_SSLMODE: "disable"}'
+```
+
+Результат сохрани в секрет `APP_ENV`.
+
+**Важно:** `JWT_SECRET` должен быть длинным случайным значением (минимум 32 символа).
+
+## Локальная разработка (опционально)
+
+Если нужно запускать Terraform локально, а не через CI/CD:
 
 ```bash
 cd terraform/envs/dev
 cp terraform.tfvars.example terraform.tfvars
 
-# Заполнить:
-# - yc_token (полученный выше)
-# - JWT_SECRET и другие sensitive переменные в app_env
+# Заполни terraform.tfvars:
+# - yc_cloud_id, yc_folder_id (из раздела выше)
+# - yc_token (из раздела 2)
+# - docker_image (например: cellardooor/blank:latest)
+# - app_env (JSON как в секрете APP_ENV)
 ```
 
-### 5. Локальный деплой
+**CI/CD не использует terraform.tfvars** — все значения берутся из GitHub Secrets/Variables.
+
+### Локальный деплой с S3 backend
 
 ```bash
 cd terraform/envs/dev
 
-# Инициализация с backend (для локальной работы)
+# Инициализация с backend
 terraform init \
   -backend-config="endpoints={s3=\"https://storage.yandexcloud.net\"}" \
-  -backend-config="bucket=terraform-state-messenger" \
+  -backend-config="bucket=<TF_STATE_BUCKET>" \
   -backend-config="region=ru-central1" \
   -backend-config="key=dev/terraform.tfstate" \
-  -backend-config="access_key=YOUR_ACCESS_KEY" \
-  -backend-config="secret_key=YOUR_SECRET_KEY" \
+  -backend-config="access_key=<YC_S3_ACCESS_KEY>" \
+  -backend-config="secret_key=<YC_S3_SECRET_KEY>" \
   -backend-config="skip_region_validation=true" \
   -backend-config="skip_credentials_validation=true" \
   -backend-config="skip_requesting_account_id=true" \
@@ -108,14 +172,17 @@ terraform apply
    - Пушит в `cellardooor/blank:<tag>` и `cellardooor/blank:latest`
 
 2. **Deploy job**:
-   - Инициализирует Terraform с S3 backend через secrets
+   - Инициализирует Terraform с S3 backend
+   - Передаёт переменные через `TF_VAR_*`:
+     - Из **Secrets**: `yc_token`, `docker_image`, `app_env`
+     - Из **Variables**: `yc_cloud_id`, `yc_folder_id`
    - Запускает `terraform plan`
    - При merge в `main`: `terraform apply -auto-approve`
 
 ### Ручной запуск деплоя
 
 ```bash
-# Новая версия = новая VM
+# Новая версия = новая VM (пересоздать)
 terraform taint module.compute.yandex_compute_instance.main
 terraform apply
 
@@ -128,9 +195,9 @@ sudo systemctl restart messenger-app
 ## Terraform State
 
 State хранится в **Yandex Object Storage (S3)**:
-- **Bucket**: `terraform-state-messenger` (или твой из `TF_STATE_BUCKET`)
+- **Bucket**: имя из `TF_STATE_BUCKET`
 - **Key**: `dev/terraform.tfstate`
-- **Credentials**: передаются через CI/CD secrets или при локальной инициализации
+- **Credentials**: `YC_S3_ACCESS_KEY` и `YC_S3_SECRET_KEY`
 
 ## Структура проекта
 
@@ -146,7 +213,7 @@ State хранится в **Yandex Object Storage (S3)**:
 │   ├── compute/          # VM с cloud-init
 │   └── envs/dev/         # Dev окружение
 └── .github/workflows/    # CI/CD
-    ├── deploy.yml        # Build + Deploy pipeline
+    └── deploy.yml        # Build + Deploy pipeline
 ```
 
 ## Переменные окружения приложения
@@ -165,13 +232,11 @@ State хранится в **Yandex Object Storage (S3)**:
 
 ## Доступ к приложению
 
+После деплоя получи IP адрес:
+```bash
+terraform output public_ip
+```
+
 - API: `http://<public_ip>:8080`
 - Web UI: `http://<public_ip>:8080`
 - WebSocket: `ws://<public_ip>:8080/ws`
-
-## Учетные данные Yandex Cloud
-
-```
-cloud_id:  b1gii3452auiela08s8k
-folder_id: b1gdnf54t05a11qn56sa
-```

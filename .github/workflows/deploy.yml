@@ -88,7 +88,10 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         env:
           TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
+          TF_VAR_yc_cloud_id: ${{ vars.YC_CLOUD_ID }}
+          TF_VAR_yc_folder_id: ${{ vars.YC_FOLDER_ID }}
           TF_VAR_docker_image: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}"
+          TF_VAR_app_env: ${{ secrets.APP_ENV }}
         run: |
           terraform plan -input=false
 
@@ -97,7 +100,10 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         env:
           TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
+          TF_VAR_yc_cloud_id: ${{ vars.YC_CLOUD_ID }}
+          TF_VAR_yc_folder_id: ${{ vars.YC_FOLDER_ID }}
           TF_VAR_docker_image: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}"
+          TF_VAR_app_env: ${{ secrets.APP_ENV }}
         run: |
           terraform apply -auto-approve -input=false
 
