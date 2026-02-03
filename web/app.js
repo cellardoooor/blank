@@ -1,119 +1,106 @@
+/**
+ * Messenger Application - Telegram-like Interface
+ * 
+ * Features:
+ * - Two-panel layout: Chat list (left) + Chat window (right)
+ * - Real-time messaging via WebSocket
+ * - Local time conversion for all timestamps
+ * - New chat modal with filtering
+ * - Auto-reconnect on disconnect
+ */
+
+// Global State
 let token = localStorage.getItem('token');
 let userId = localStorage.getItem('userId');
+let currentUser = null;
 let ws = null;
-let currentContact = null;
-let contacts = new Map();
+let currentChat = null;
+let chats = new Map(); // userId -> chat data
 let allUsers = [];
 let conversationPartners = new Set();
+let messagesMap = new Map(); // userId -> messages array
 
 const API_URL = '';
 
+// Initialize application
 if (token) {
-    showChat();
-    initWebSocket();
+    initApp();
 } else {
     showAuth();
 }
 
+// ==================== AUTHENTICATION ====================
+
 function showAuth() {
     document.getElementById('auth-section').style.display = 'flex';
     document.getElementById('chat-section').style.display = 'none';
+    document.getElementById('username').value = '';
+    document.getElementById('password').value = '';
+    document.getElementById('auth-error').textContent = '';
 }
 
-function showChat() {
-    document.getElementById('auth-section').style.display = 'none';
-    document.getElementById('chat-section').style.display = 'flex';
-    document.getElementById('user-info').textContent = 'Connected';
-    loadContacts();
+async function login() {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const errorEl = document.getElementById('auth-error');
+
+    if (!username || !password) {
+        errorEl.textContent = 'Please enter username and password';
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Login failed');
+
+        token = data.token;
+        localStorage.setItem('token', token);
+        
+        await initApp();
+    } catch (e) {
+        errorEl.textContent = e.message;
+    }
 }
 
 async function register() {
-    const username = document.getElementById('username').value;
+    const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
+    const errorEl = document.getElementById('auth-error');
 
     // Client-side validation
     if (username.length < 5 || username.length > 16) {
-        document.getElementById('auth-error').textContent = 'Username must be 5-16 characters';
+        errorEl.textContent = 'Username must be between 5 and 16 characters';
         return;
     }
     if (password.length < 5) {
-        document.getElementById('auth-error').textContent = 'Password must be at least 5 characters';
+        errorEl.textContent = 'Password must be at least 5 characters';
         return;
     }
 
     try {
         const res = await fetch(`${API_URL}/api/auth/register`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({username, password})
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
         });
 
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
+        if (!res.ok) throw new Error(data.error || 'Registration failed');
 
         token = data.token;
         userId = data.user.id;
         localStorage.setItem('token', token);
         localStorage.setItem('userId', userId);
-        showChat();
-        initWebSocket();
-    } catch (e) {
-        document.getElementById('auth-error').textContent = e.message;
-    }
-}
-
-async function login() {
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
-
-    try {
-        const res = await fetch(`${API_URL}/api/auth/login`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({username, password})
-        });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-
-        token = data.token;
-        // Get user info to store userId
-        const userRes = await fetch(`${API_URL}/api/users`, {
-            headers: {'Authorization': `Bearer ${token}`}
-        });
-        const users = await userRes.json();
-        // Find current user by matching the token (we'll need to fetch current user)
-        // For now, we'll fetch conversations to get userId from partners
-        const convRes = await fetch(`${API_URL}/api/conversations`, {
-            headers: {'Authorization': `Bearer ${token}`}
-        });
         
-        token = data.token;
-        localStorage.setItem('token', token);
-        showChat();
-        initWebSocket();
-        
-        // Load user ID from users list (temporary solution)
-        await loadCurrentUser();
+        await initApp();
     } catch (e) {
-        document.getElementById('auth-error').textContent = e.message;
-    }
-}
-
-async function loadCurrentUser() {
-    try {
-        const res = await fetch(`${API_URL}/api/users`, {
-            headers: {'Authorization': `Bearer ${token}`}
-        });
-        const users = await res.json();
-        // We'll determine current user later through a dedicated endpoint
-        // For now, just store the first user ID as a placeholder
-        if (users.length > 0 && !userId) {
-            // Actually, we need to figure out which user is "me"
-            // Let's use a workaround - store users and compare with conversations
-        }
-    } catch (e) {
-        console.error('Failed to load current user:', e);
+        errorEl.textContent = e.message;
     }
 }
 
@@ -122,11 +109,77 @@ function logout() {
     localStorage.removeItem('userId');
     token = null;
     userId = null;
-    if (ws) ws.close();
+    currentUser = null;
+    currentChat = null;
+    chats.clear();
+    messagesMap.clear();
+    
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+    
     showAuth();
 }
 
+// ==================== APP INITIALIZATION ====================
+
+async function initApp() {
+    try {
+        // Get current user info
+        const usersRes = await fetch(`${API_URL}/api/users`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!usersRes.ok) {
+            if (usersRes.status === 401) {
+                logout();
+                return;
+            }
+            throw new Error('Failed to get users');
+        }
+        
+        allUsers = await usersRes.json();
+        
+        // Find current user (we need to determine which user is "me")
+        // For now, we'll use the userId from registration, or try to infer from conversations
+        if (!userId) {
+            // Try to get from any conversation
+            const convRes = await fetch(`${API_URL}/api/conversations`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (convRes.ok) {
+                const partners = await convRes.json();
+                // We still need a way to identify ourselves
+                // For now, set a placeholder and try to determine later
+            }
+        }
+        
+        document.getElementById('auth-section').style.display = 'none';
+        document.getElementById('chat-section').style.display = 'flex';
+        
+        // Load chats
+        await loadChats();
+        
+        // Initialize WebSocket
+        initWebSocket();
+        
+        // Setup message input auto-resize
+        setupInputResize();
+        
+    } catch (e) {
+        console.error('Failed to initialize app:', e);
+        showAuth();
+    }
+}
+
+// ==================== WEBSOCKET ====================
+
 function initWebSocket() {
+    if (ws) {
+        ws.close();
+    }
+    
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${protocol}//${window.location.host}/ws?token=${token}`);
 
@@ -136,11 +189,11 @@ function initWebSocket() {
 
     ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
-        displayMessage(msg);
+        handleIncomingMessage(msg);
     };
 
     ws.onclose = () => {
-        console.log('WebSocket disconnected');
+        console.log('WebSocket disconnected, reconnecting in 3s...');
         setTimeout(initWebSocket, 3000);
     };
 
@@ -149,197 +202,463 @@ function initWebSocket() {
     };
 }
 
-async function loadContacts() {
-    try {
-        // Load all conversations (partners)
-        const convRes = await fetch(`${API_URL}/api/conversations`, {
-            headers: {'Authorization': `Bearer ${token}`}
-        });
-        const partners = await convRes.json();
-        
-        conversationPartners.clear();
-        contacts.clear();
-        
-        // Fetch user details for each partner
-        for (const partnerId of partners) {
-            const userRes = await fetch(`${API_URL}/api/users/${partnerId}`, {
-                headers: {'Authorization': `Bearer ${token}`}
-            });
-            if (userRes.ok) {
-                const user = await userRes.json();
-                contacts.set(partnerId, {id: partnerId, username: user.username});
-                conversationPartners.add(partnerId);
-            }
-        }
-        
-        renderContacts();
-    } catch (e) {
-        console.error('Failed to load contacts:', e);
+function handleIncomingMessage(msg) {
+    const partnerId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
+    
+    // Add to messages map
+    if (!messagesMap.has(partnerId)) {
+        messagesMap.set(partnerId, []);
+    }
+    messagesMap.get(partnerId).push(msg);
+    
+    // Update chat list
+    updateChatFromMessage(partnerId, msg);
+    
+    // If this is the active chat, display it
+    if (currentChat === partnerId) {
+        displayMessage(msg);
     }
 }
 
-function renderContacts() {
-    const container = document.getElementById('contacts');
+// ==================== CHAT LIST ====================
+
+async function loadChats() {
+    try {
+        // Use the new /api/chats endpoint which provides all needed data
+        const res = await fetch(`${API_URL}/api/chats`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!res.ok) {
+            if (res.status === 401) {
+                logout();
+                return;
+            }
+            throw new Error('Failed to load chats');
+        }
+        
+        const chatList = await res.json();
+        
+        chats.clear();
+        conversationPartners.clear();
+        
+        chatList.forEach(chat => {
+            chats.set(chat.user_id, {
+                userId: chat.user_id,
+                username: chat.username,
+                lastMessage: chat.last_message,
+                lastMessageTime: new Date(chat.last_message_time)
+            });
+            conversationPartners.add(chat.user_id);
+            
+            // Also update current user if we haven't identified ourselves yet
+            if (!userId) {
+                // We need to infer this from the fact that we're seeing this chat
+                // This is a limitation - ideally server should provide /api/me endpoint
+            }
+        });
+        
+        renderChatList();
+        
+    } catch (e) {
+        console.error('Failed to load chats:', e);
+    }
+}
+
+function updateChatFromMessage(partnerId, msg) {
+    const text = new TextDecoder().decode(new Uint8Array(msg.payload));
+    const chat = chats.get(partnerId);
+    
+    if (chat) {
+        chat.lastMessage = text;
+        chat.lastMessageTime = new Date(msg.created_at);
+    } else {
+        // New chat - need to fetch user info
+        fetchUserInfo(partnerId).then(user => {
+            if (user) {
+                chats.set(partnerId, {
+                    userId: partnerId,
+                    username: user.username,
+                    lastMessage: text,
+                    lastMessageTime: new Date(msg.created_at)
+                });
+                conversationPartners.add(partnerId);
+                renderChatList();
+            }
+        });
+        return;
+    }
+    
+    // Move chat to top by re-rendering
+    renderChatList();
+}
+
+async function fetchUserInfo(userId) {
+    try {
+        const res = await fetch(`${API_URL}/api/users/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            return await res.json();
+        }
+    } catch (e) {
+        console.error('Failed to fetch user:', e);
+    }
+    return null;
+}
+
+function renderChatList() {
+    const container = document.getElementById('contacts-list');
     container.innerHTML = '';
-    contacts.forEach((contact, id) => {
+    
+    // Sort chats by last message time (newest first)
+    const sortedChats = Array.from(chats.values()).sort((a, b) => {
+        return b.lastMessageTime - a.lastMessageTime;
+    });
+    
+    if (sortedChats.length === 0) {
+        container.innerHTML = '<div style="padding: 40px; text-align: center; color: #666;">No chats yet.<br>Click "+" to start a new chat</div>';
+        return;
+    }
+    
+    sortedChats.forEach(chat => {
         const div = document.createElement('div');
-        div.className = 'contact' + (id === currentContact ? ' active' : '');
-        div.textContent = contact.username;
-        div.onclick = () => selectContact(id);
+        div.className = 'chat-item' + (currentChat === chat.userId ? ' active' : '');
+        div.onclick = () => selectChat(chat.userId);
+        
+        const initial = chat.username.charAt(0).toUpperCase();
+        const timeStr = formatChatListTime(chat.lastMessageTime);
+        const preview = chat.lastMessage ? truncateText(chat.lastMessage, 30) : 'No messages yet';
+        
+        div.innerHTML = `
+            <div class="chat-avatar">${initial}</div>
+            <div class="chat-content">
+                <div class="chat-header-row">
+                    <div class="chat-username">${escapeHtml(chat.username)}</div>
+                    <div class="chat-time">${timeStr}</div>
+                </div>
+                <div class="chat-preview">${escapeHtml(preview)}</div>
+            </div>
+        `;
+        
         container.appendChild(div);
     });
 }
 
-function selectContact(contactId) {
-    currentContact = contactId;
-    renderContacts();
-    loadMessages(contactId);
+function selectChat(chatUserId) {
+    currentChat = chatUserId;
+    const chat = chats.get(chatUserId);
+    
+    if (!chat) return;
+    
+    // Update UI
+    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('active-chat').style.display = 'flex';
+    
+    // Update chat header
+    document.getElementById('chat-username').textContent = chat.username;
+    document.getElementById('chat-status').textContent = '';
+    document.getElementById('chat-avatar').textContent = chat.username.charAt(0).toUpperCase();
+    
+    // Update sidebar selection
+    renderChatList();
+    
+    // Load messages
+    loadMessages(chatUserId);
+    
+    // Focus input
+    document.getElementById('message-input').focus();
 }
 
-async function loadMessages(contactId) {
+async function loadMessages(chatUserId) {
+    const container = document.getElementById('messages');
+    container.innerHTML = '';
+    
     try {
-        const res = await fetch(`${API_URL}/api/messages/${contactId}`, {
-            headers: {'Authorization': `Bearer ${token}`}
+        const res = await fetch(`${API_URL}/api/messages/${chatUserId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
         });
+        
+        if (!res.ok) throw new Error('Failed to load messages');
+        
         const messages = await res.json();
-        document.getElementById('messages').innerHTML = '';
-        messages.reverse().forEach(m => displayMessage(m));
+        
+        // Store in map
+        messagesMap.set(chatUserId, messages);
+        
+        // Display messages (oldest first)
+        messages.reverse().forEach(msg => displayMessage(msg));
+        
+        // Scroll to bottom
+        scrollToBottom();
+        
     } catch (e) {
         console.error('Failed to load messages:', e);
     }
 }
 
+function displayMessage(msg) {
+    const container = document.getElementById('messages');
+    const isOutgoing = msg.sender_id === userId;
+    
+    const div = document.createElement('div');
+    div.className = `message ${isOutgoing ? 'outgoing' : 'incoming'}`;
+    
+    const text = new TextDecoder().decode(new Uint8Array(msg.payload));
+    const time = formatMessageTime(new Date(msg.created_at));
+    
+    div.innerHTML = `
+        <div class="message-text">${escapeHtml(text)}</div>
+        <div class="message-time">${time}</div>
+    `;
+    
+    container.appendChild(div);
+    scrollToBottom();
+}
+
 function sendMessage() {
     const input = document.getElementById('message-input');
     const text = input.value.trim();
-    if (!text || !currentContact) return;
-
+    
+    if (!text || !currentChat) return;
+    
     const payload = new TextEncoder().encode(text);
     const msg = {
-        receiver_id: currentContact,
+        receiver_id: currentChat,
         payload: Array.from(payload)
     };
-
-    ws.send(JSON.stringify(msg));
-    input.value = '';
-}
-
-function displayMessage(msg) {
-    // Only display if it's part of current conversation
-    if (currentContact && 
-        ((msg.sender_id === currentContact && msg.receiver_id === userId) ||
-         (msg.sender_id === userId && msg.receiver_id === currentContact))) {
-        
-        const container = document.getElementById('messages');
-        const div = document.createElement('div');
-        const isSent = msg.sender_id === userId;
-        div.className = 'message ' + (isSent ? 'sent' : 'received');
-        
-        const payload = new Uint8Array(msg.payload);
-        const text = new TextDecoder().decode(payload);
-        
-        const time = new Date(msg.created_at).toLocaleTimeString();
-        div.innerHTML = `<div>${text}</div><div class="message-time">${time}</div>`;
-        
-        container.appendChild(div);
-        container.scrollTop = container.scrollHeight;
-    }
     
-    // Refresh contacts if this is a new conversation
-    if (!conversationPartners.has(msg.sender_id) && msg.sender_id !== userId) {
-        loadContacts();
-    }
-    if (!conversationPartners.has(msg.receiver_id) && msg.receiver_id !== userId) {
-        loadContacts();
-    }
+    ws.send(JSON.stringify(msg));
+    
+    // Clear input and resize
+    input.value = '';
+    input.style.height = 'auto';
+    
+    // Optimistically add to UI
+    const optimisticMsg = {
+        id: 'temp-' + Date.now(),
+        sender_id: userId,
+        receiver_id: currentChat,
+        payload: Array.from(payload),
+        created_at: new Date().toISOString()
+    };
+    
+    displayMessage(optimisticMsg);
+    
+    // Update chat list
+    updateChatFromMessage(currentChat, optimisticMsg);
 }
 
-// New Chat Modal Functions
-async function showNewChatModal() {
-    document.getElementById('new-chat-modal').style.display = 'block';
-    await loadAllUsersForModal();
+// ==================== NEW CHAT MODAL ====================
+
+function showNewChatModal() {
+    const modal = document.getElementById('new-chat-modal');
+    modal.classList.add('active');
+    document.getElementById('new-chat-search').value = '';
+    document.getElementById('new-chat-error').textContent = '';
+    loadAvailableUsers();
 }
 
 function closeNewChatModal() {
-    document.getElementById('new-chat-modal').style.display = 'none';
+    document.getElementById('new-chat-modal').classList.remove('active');
 }
 
-async function loadAllUsersForModal() {
+async function loadAvailableUsers() {
     try {
-        // Load all users
-        const usersRes = await fetch(`${API_URL}/api/users`, {
-            headers: {'Authorization': `Bearer ${token}`}
-        });
-        allUsers = await usersRes.json();
+        // Get all users and conversations
+        const [usersRes, convRes] = await Promise.all([
+            fetch(`${API_URL}/api/users`, { headers: { 'Authorization': `Bearer ${token}` } }),
+            fetch(`${API_URL}/api/conversations`, { headers: { 'Authorization': `Bearer ${token}` } })
+        ]);
         
-        // Load conversation partners to filter them out
-        const convRes = await fetch(`${API_URL}/api/conversations`, {
-            headers: {'Authorization': `Bearer ${token}`}
-        });
+        if (!usersRes.ok || !convRes.ok) throw new Error('Failed to load data');
+        
+        allUsers = await usersRes.json();
         const partners = await convRes.json();
         conversationPartners = new Set(partners);
         
-        // Try to determine current user from conversations
-        // If we have a message, we can infer the current user
-        if (!userId && partners.length > 0) {
-            // We need to know who "we" are - this is a limitation
-            // For now, let's try to get user info from the first conversation
-        }
-        
         renderUserList();
+        
     } catch (e) {
-        console.error('Failed to load users:', e);
-        document.getElementById('user-list').innerHTML = '<li class="no-users">Failed to load users</li>';
+        console.error('Failed to load available users:', e);
+        document.getElementById('user-list').innerHTML = 
+            '<li class="no-users">Failed to load users. Please try again.</li>';
     }
 }
 
-function renderUserList() {
+function renderUserList(filter = '') {
     const list = document.getElementById('user-list');
     list.innerHTML = '';
     
-    // Filter users: exclude current user and those with existing conversations
-    const availableUsers = allUsers.filter(user => {
-        // Skip users we already have conversations with
-        if (conversationPartners.has(user.id)) return false;
+    const filterLower = filter.toLowerCase();
+    
+    // Filter users
+    const filteredUsers = allUsers.filter(user => {
+        // Skip if matches filter
+        if (filter && !user.username.toLowerCase().includes(filterLower)) {
+            return false;
+        }
+        
+        // Skip current user (self)
+        if (user.id === userId) return false;
+        
         return true;
     });
     
-    if (availableUsers.length === 0) {
-        list.innerHTML = '<li class="no-users">No available users to chat with</li>';
+    if (filteredUsers.length === 0) {
+        list.innerHTML = '<li class="no-users">No users found</li>';
         return;
     }
     
-    availableUsers.forEach(user => {
+    filteredUsers.forEach(user => {
+        const hasConversation = conversationPartners.has(user.id);
         const li = document.createElement('li');
-        li.className = 'user-list-item';
-        li.textContent = user.username;
-        li.onclick = () => startNewChat(user.id, user.username);
+        li.className = 'user-list-item' + (hasConversation ? ' disabled' : '');
+        
+        const initial = user.username.charAt(0).toUpperCase();
+        const status = hasConversation ? 'Already chatting' : 'Click to start chat';
+        
+        li.innerHTML = `
+            <div class="user-list-avatar">${initial}</div>
+            <div class="user-list-info">
+                <div class="user-list-name">${escapeHtml(user.username)}</div>
+                <div class="user-list-status">${status}</div>
+            </div>
+        `;
+        
+        if (!hasConversation) {
+            li.onclick = () => startNewChat(user.id, user.username);
+        }
+        
         list.appendChild(li);
     });
 }
 
 function startNewChat(userId, username) {
-    closeNewChatModal();
+    // Check if chat already exists
+    if (conversationPartners.has(userId)) {
+        document.getElementById('new-chat-error').textContent = 
+            `A chat with ${username} already exists.`;
+        
+        // Highlight existing chat
+        const chat = chats.get(userId);
+        if (chat) {
+            selectChat(userId);
+        }
+        
+        closeNewChatModal();
+        return;
+    }
     
-    // Add to contacts
-    contacts.set(userId, {id: userId, username: username});
+    // Add to chats
+    chats.set(userId, {
+        userId: userId,
+        username: username,
+        lastMessage: '',
+        lastMessageTime: new Date()
+    });
     conversationPartners.add(userId);
     
-    // Select this contact
-    selectContact(userId);
+    // Close modal
+    closeNewChatModal();
     
-    // Refresh the contacts list
-    renderContacts();
+    // Select the new chat
+    selectChat(userId);
+    
+    // Re-render chat list
+    renderChatList();
 }
 
-// Close modal when clicking outside
-window.onclick = function(event) {
-    const modal = document.getElementById('new-chat-modal');
-    if (event.target === modal) {
-        closeNewChatModal();
+// ==================== UTILITY FUNCTIONS ====================
+
+function formatChatListTime(date) {
+    if (!date) return '';
+    
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    
+    if (messageDate.getTime() === today.getTime()) {
+        // Today: show time
+        return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    } else if (messageDate.getTime() === yesterday.getTime()) {
+        // Yesterday
+        return 'Yesterday';
+    } else {
+        // Older: show date
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
 }
 
-document.getElementById('message-input').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') sendMessage();
+function formatMessageTime(date) {
+    if (!date) return '';
+    
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    
+    if (messageDate.getTime() === today.getTime()) {
+        // Same day: show time only
+        return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    } else {
+        // Different day: show date and time
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' +
+               date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    }
+}
+
+function truncateText(text, maxLength) {
+    if (!text) return '';
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function scrollToBottom() {
+    const container = document.getElementById('messages-container');
+    container.scrollTop = container.scrollHeight;
+}
+
+function setupInputResize() {
+    const input = document.getElementById('message-input');
+    
+    input.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+    
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+}
+
+// Search in new chat modal
+document.getElementById('new-chat-search')?.addEventListener('input', function() {
+    renderUserList(this.value);
+});
+
+// Close modal on outside click
+document.getElementById('new-chat-modal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeNewChatModal();
+    }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    // Escape to close modal
+    if (e.key === 'Escape') {
+        closeNewChatModal();
+    }
 });

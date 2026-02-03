@@ -36,6 +36,7 @@ func (h *Handler) Router() *mux.Router {
 	api.HandleFunc("/users", h.listUsers).Methods("GET")
 	api.HandleFunc("/users/{id}", h.getUser).Methods("GET")
 	api.HandleFunc("/conversations", h.getConversations).Methods("GET")
+	api.HandleFunc("/chats", h.getChats).Methods("GET")
 	api.HandleFunc("/messages", h.sendMessage).Methods("POST")
 	api.HandleFunc("/messages/{user_id}", h.getMessages).Methods("GET")
 
@@ -123,6 +124,18 @@ func (h *Handler) getConversations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, partners)
+}
+
+func (h *Handler) getChats(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	chats, err := h.messageService.GetChatList(r.Context(), userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to get chats")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, chats)
 }
 
 func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {

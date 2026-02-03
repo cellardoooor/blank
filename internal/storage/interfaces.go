@@ -18,6 +18,12 @@ type MessageRepository interface {
 	Create(ctx context.Context, msg *model.Message) error
 	GetByUserPair(ctx context.Context, user1, user2 uuid.UUID, limit, offset int) ([]model.Message, error)
 	GetConversationPartners(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
+	GetChatList(ctx context.Context, userID uuid.UUID) ([]ChatInfo, error)
+}
+
+type ChatInfo struct {
+	PartnerID   uuid.UUID
+	LastMessage *model.Message
 }
 
 type TransactionManager interface {

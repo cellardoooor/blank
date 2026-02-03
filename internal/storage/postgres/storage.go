@@ -188,3 +188,50 @@ func (r *MessageRepo) GetConversationPartners(ctx context.Context, userID uuid.U
 	}
 	return partners, rows.Err()
 }
+
+func (r *MessageRepo) GetChatList(ctx context.Context, userID uuid.UUID) ([]storage.ChatInfo, error) {
+	conn := getConn(ctx, r.pool)
+	sql := `
+		WITH last_messages AS (
+			SELECT DISTINCT ON (
+				CASE 
+					WHEN sender_id = $1 THEN receiver_id 
+					ELSE sender_id 
+				END
+			)
+			id,
+			sender_id,
+			receiver_id,
+			payload,
+			created_at,
+			CASE 
+				WHEN sender_id = $1 THEN receiver_id 
+				ELSE sender_id 
+			END as partner_id
+		FROM messages 
+		WHERE sender_id = $1 OR receiver_id = $1
+		ORDER BY partner_id, created_at DESC
+		)
+		SELECT partner_id, id, sender_id, receiver_id, payload, created_at 
+		FROM last_messages 
+		ORDER BY created_at DESC`
+
+	rows, err := conn.Query(ctx, sql, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var chats []storage.ChatInfo
+	for rows.Next() {
+		var chat storage.ChatInfo
+		var msg model.Message
+		err := rows.Scan(&chat.PartnerID, &msg.ID, &msg.SenderID, &msg.ReceiverID, &msg.Payload, &msg.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		chat.LastMessage = &msg
+		chats = append(chats, chat)
+	}
+	return chats, rows.Err()
+}

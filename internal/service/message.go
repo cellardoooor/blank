@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"messenger/internal/model"
@@ -67,4 +68,48 @@ func (s *MessageService) GetConversationPartners(ctx context.Context, userID uui
 		return nil, fmt.Errorf("database unavailable")
 	}
 	return s.repo.GetConversationPartners(ctx, userID)
+}
+
+type ChatWithUser struct {
+	UserID          string    `json:"user_id"`
+	Username        string    `json:"username"`
+	LastMessage     string    `json:"last_message"`
+	LastMessageTime time.Time `json:"last_message_time"`
+}
+
+func (s *MessageService) GetChatList(ctx context.Context, userID uuid.UUID) ([]ChatWithUser, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("database unavailable")
+	}
+
+	chats, err := s.repo.GetChatList(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []ChatWithUser
+	for _, chat := range chats {
+		user, err := s.userRepo.GetByID(ctx, chat.PartnerID)
+		if err != nil {
+			continue
+		}
+		if user == nil {
+			continue
+		}
+
+		// Decode payload to string
+		lastMsgText := ""
+		if chat.LastMessage != nil {
+			lastMsgText = string(chat.LastMessage.Payload)
+		}
+
+		result = append(result, ChatWithUser{
+			UserID:          user.ID.String(),
+			Username:        user.Username,
+			LastMessage:     lastMsgText,
+			LastMessageTime: chat.LastMessage.CreatedAt,
+		})
+	}
+
+	return result, nil
 }

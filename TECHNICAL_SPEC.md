@@ -12,6 +12,9 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 - Opaque message payloads (server treats as binary blobs)
 - Self-healing deployment with Docker Compose
 - Infrastructure as Code with Terraform
+- Automatic default user creation on startup
+- New chat creation with user filtering
+- **Telegram-like UI**: Two-panel layout with chat list and message bubbles
 
 ### 1.3 Architecture Principles
 - **Stateless**: JWT tokens only, no sessions
@@ -35,6 +38,7 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 - **Type**: Single Page Application (SPA)
 - **Files**: HTML, CSS, Vanilla JavaScript
 - **Location**: `/web/` directory, served by Go server
+- **Styling**: White background (#fff), black text (#000) for high contrast
 
 ### 2.3 Infrastructure
 - **Containerization**: Docker + Docker Compose
@@ -52,34 +56,34 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 .
 ├── cmd/server/main.go          # Application entry point
 ├── internal/
-│   ├── app/app.go             # Application initialization, dependency injection
+│   ├── app/app.go             # Application initialization, dependency injection, default user seeding
 │   ├── auth/
-│   │   ├── service.go         # JWT token generation/validation
+│   │   ├── service.go         # JWT token generation/validation + user validation (username 5-16 chars, password min 5)
 │   │   └── middleware.go      # HTTP auth middleware
-│   ├── config/config.go       # Configuration from env vars
-│   ├── http/handler.go        # HTTP REST handlers
+│   ├── config/config.go       # Configuration from env vars (includes DEFAULT_USER, DEFAULT_PASSWORD)
+│   ├── http/handler.go        # HTTP REST handlers + new endpoints (/api/users, /api/conversations)
 │   ├── model/
 │   │   ├── user.go            # User entity
 │   │   └── message.go         # Message entity
 │   ├── service/
-│   │   ├── user.go            # User business logic
-│   │   └── message.go         # Message business logic
+│   │   ├── user.go            # User business logic + GetAll()
+│   │   └── message.go         # Message business logic + GetConversationPartners()
 │   ├── storage/
-│   │   ├── interfaces.go      # Repository interfaces
+│   │   ├── interfaces.go      # Repository interfaces (updated with GetAll, GetConversationPartners)
 │   │   └── postgres/          # PostgreSQL implementations
-│   │       └── storage.go     # Storage + UserRepo + MessageRepo
+│   │       └── storage.go     # Storage + UserRepo + MessageRepo (updated methods)
 │   └── ws/
 │       ├── handler.go         # WebSocket HTTP handler
 │       └── hub.go             # WebSocket connection manager
-├── web/                        # Frontend files
-│   ├── index.html             # Main HTML
-│   ├── app.js                 # JavaScript application
-│   └── style.css              # Styles
+├── web/                        # Frontend files (white background, black text styling)
+│   ├── index.html             # Main HTML (includes New Chat modal)
+│   ├── app.js                 # JavaScript application (dynamic contacts, user filtering)
+│   └── style.css              # Styles (white bg, black text)
 ├── migrations/
 │   └── 001_init.sql           # Database schema
 ├── terraform/                  # Infrastructure
 │   ├── network/               # VPC, subnet, security groups
-│   ├── compute/               # VM with cloud-init
+│   ├── compute/               # VM with cloud-init (unique naming with timestamp)
 │   └── envs/dev/              # Environment configuration
 ├── docker-compose.yml         # Local development
 ├── Dockerfile                 # Application image
@@ -93,8 +97,8 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 ```go
 type User struct {
     ID           uuid.UUID `json:"id"`
-    Username     string    `json:"username"`
-    PasswordHash string    `json:"-"` // Never exposed in JSON
+    Username     string    `json:"username"`         // 5-16 characters
+    PasswordHash string    `json:"-"`                // Never exposed in JSON
     CreatedAt    time.Time `json:"created_at"`
 }
 ```
@@ -105,7 +109,7 @@ type Message struct {
     ID         uuid.UUID `json:"id"`
     SenderID   uuid.UUID `json:"sender_id"`
     ReceiverID uuid.UUID `json:"receiver_id"`
-    Payload    []byte    `json:"payload"` // Opaque binary data
+    Payload    []byte    `json:"payload"`          // Opaque binary data
     CreatedAt  time.Time `json:"created_at"`
 }
 ```
@@ -141,15 +145,19 @@ CREATE INDEX idx_messages_created ON messages(created_at DESC);
 ### 5.1 Authentication
 All protected endpoints require header: `Authorization: Bearer <token>`
 
-### 5.2 Endpoints
+### 5.2 Validation Rules
+- **Username**: 5-16 characters
+- **Password**: Minimum 5 characters
+
+### 5.3 Endpoints
 
 #### POST /api/auth/register
-Register new user.
+Register new user with validation.
 ```json
 // Request
 {
-  "username": "string",
-  "password": "string"
+  "username": "string",    // 5-16 characters
+  "password": "string"     // Minimum 5 characters
 }
 
 // Response 201
@@ -164,7 +172,15 @@ Register new user.
 
 // Response 400
 {
-  "error": "username already exists"
+  "error": "username must be between 5 and 16 characters"
+}
+// or
+{
+  "error": "password must be at least 5 characters"
+}
+// or
+{
+  "error": "username already taken"
 }
 ```
 
@@ -189,6 +205,19 @@ Authenticate user.
 }
 ```
 
+#### GET /api/users
+Get list of all users (requires auth). Used for "New Chat" functionality.
+```json
+// Response 200
+[
+  {
+    "id": "uuid",
+    "username": "string",
+    "created_at": "timestamp"
+  }
+]
+```
+
 #### GET /api/users/{id}
 Get user by ID (requires auth).
 ```json
@@ -203,6 +232,31 @@ Get user by ID (requires auth).
 {
   "error": "user not found"
 }
+```
+
+#### GET /api/conversations
+Get list of user IDs with whom the current user has conversations (requires auth).
+```json
+// Response 200
+[
+  "uuid",
+  "uuid",
+  ...
+]
+```
+
+#### GET /api/chats
+Get formatted chat list with user info and last message preview (requires auth). Used for sidebar chat list.
+```json
+// Response 200
+[
+  {
+    "user_id": "uuid",
+    "username": "string",
+    "last_message": "text content decoded from payload",
+    "last_message_time": "2026-02-03T15:30:00Z"
+  }
+]
 ```
 
 #### POST /api/messages
@@ -301,8 +355,17 @@ Health check endpoint.
 | DB_PASSWORD | Database password | `messenger` | No |
 | DB_NAME | Database name | `messenger` | No |
 | DB_SSLMODE | SSL mode | `disable` | No |
+| DEFAULT_USER | Default username to create on startup | - | No |
+| DEFAULT_PASSWORD | Default password for default user | - | No |
 
-### 6.2 Database Connection String Format
+### 6.2 Default User Seeding
+If `DEFAULT_USER` and `DEFAULT_PASSWORD` are set:
+1. App checks if user exists on startup
+2. If not exists, creates user with bcrypt hashed password
+3. Logs creation or "already exists" message
+4. Does not fail startup on error
+
+### 6.3 Database Connection String Format
 ```
 host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<mode>
 ```
@@ -316,12 +379,18 @@ host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<m
 4. Setup WebSocket hub
 5. Build HTTP router with middleware
 6. Add health check endpoint
+7. **Seed default user** if DEFAULT_USER/DEFAULT_PASSWORD configured
 
 ### 7.2 Authentication Service (internal/auth/service.go)
 - **Methods**:
-  - `Register(username, password) (*User, error)`
+  - `Register(username, password) (*User, error)` - with validation (username 5-16 chars, password min 5)
   - `Login(username, password) (token string, err error)`
   - `ValidateToken(token string) (userID uuid.UUID, err error)`
+  - `HashPassword(password string) (string, error)`
+  - `CheckPassword(password, hash string) bool`
+- **Validation Rules**:
+  - Username: 5-16 characters
+  - Password: Minimum 5 characters
 - **Password Hashing**: bcrypt with default cost
 - **JWT Claims**: `sub` (user ID), `exp` (expiration)
 
@@ -348,13 +417,17 @@ host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<m
 - `Create(ctx, *User) error`
 - `GetByID(ctx, uuid) (*User, error)`
 - `GetByUsername(ctx, string) (*User, error)`
+- `GetAll(ctx) ([]User, error)` - NEW: returns all users for "New Chat" feature
 
 **MessageRepo**:
 - `Create(ctx, *Message) error`
 - `GetByUserPair(ctx, user1, user2, limit, offset) ([]Message, error)`
+- `GetConversationPartners(ctx, userID) ([]uuid.UUID, error)` - NEW: returns IDs of users with conversations
 
 ### 7.5 HTTP Handlers (internal/http/handler.go)
-- User registration/login
+- User registration/login with validation
+- **NEW**: `GET /api/users` - List all users
+- **NEW**: `GET /api/conversations` - List conversation partners
 - Authenticated message endpoints
 - JWT middleware injection
 - Static file serving (web/)
@@ -362,22 +435,100 @@ host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<m
 ## 8. Frontend Specification
 
 ### 8.1 Features
-- User registration and login
+- User registration and login with validation (username 5-16 chars, password min 5)
 - Real-time messaging via WebSocket
-- Contact list (hardcoded demo for MVP)
+- **Telegram-like Two-Panel Layout**:
+  - Left sidebar: Chat list with avatars, usernames, message previews, timestamps
+  - Right panel: Active chat window with message bubbles
+- **Dynamic Contact List**: Loaded from `GET /api/chats` endpoint, sorted by last message time
 - Message history loading
 - Auto-reconnect on disconnect
+- Smart timestamp formatting (Today: HH:MM, Yesterday, or MMM DD)
+- Auto-resizing message input
+- "New Chat" button with search and filtering modal
+- User filtering (exclude self and existing conversations)
 
-### 8.2 Local Storage Keys
+### 8.2 Layout Structure
+```
++-----------------------------------------------+
+|  Chats    +   |  [Avatar] Username           |
+|  Sidebar      |                               |
+|               |  [Message bubbles]            |
+|  • User1     |                               |
+|    Preview   |  [Blue bubble - me]          |
+|    15:30     |                               |
+|              |  [Gray bubble - other]       |
+|  • User2     |                               |
+|    Preview   |  [Type message...]  [Send]    |
+|    Yesterday |                               |
++----------------+-------------------------------+
+```
+
+### 8.3 Local Storage Keys
 - `token` - JWT token
 - `userId` - Current user UUID
 
-### 8.3 WebSocket Protocol
+### 8.4 WebSocket Protocol
 1. Connection: `ws://host/ws?token=<jwt>`
 2. On open: Log to console
-3. On message: Parse JSON, display in UI
+3. On message: Parse JSON, display in UI, update chat list
 4. On close: Reconnect after 3 seconds
 5. Send: JSON with receiver_id and payload array
+
+### 8.5 Chat List (Left Sidebar)
+- **Header**: "Chats" title + "+" button for new chat
+- **Chat Items** (sorted by last message time, newest first):
+  - Avatar circle with first letter of username
+  - Username (bold)
+  - Last message preview (truncated)
+  - Timestamp with smart formatting:
+    - Today: "HH:MM" (e.g., "15:30")
+    - Yesterday: "Yesterday"
+    - Older: "MMM DD" (e.g., "Feb 28")
+- **Footer**: Current user name + Logout button
+
+### 8.6 Chat Window (Right Panel)
+- **Header**: Avatar + Username + Status
+- **Messages Area**: Scrollable container with bubbles
+  - **Outgoing (me)**: Black background (#000), white text, right-aligned, rounded corners
+  - **Incoming (other)**: Light gray background (#f0f0f0), black text, left-aligned, rounded corners
+  - **Timestamp**: Small text below message (local time)
+    - Same day: "HH:MM" ("15:30")
+    - Different day: "MMM DD, HH:MM" ("Feb 28, 15:30")
+- **Input Area**: Auto-resizing textarea + Send button
+
+### 8.7 New Chat Modal
+1. Click "+" button in sidebar
+2. Modal opens with search input
+3. User list shows all users except:
+   - Current user (self)
+   - Users with existing conversations (grayed out with "Already chatting")
+4. Search filters users by username
+5. Click on available user to start chat
+6. Validation:
+   - If user exists and no conversation: Open new chat
+   - If user exists with conversation: Show warning, highlight existing chat
+   - If user doesn't exist: Show error
+
+### 8.8 Timezone & Localization
+- All timestamps converted to browser's local time
+- Uses `Intl.DateTimeFormat` for formatting
+- English only for all UI text
+
+### 8.9 Styling (Telegram-like)
+- **Background**: White (#ffffff) for all containers
+- **Text**: Black (#000000) for primary text
+- **Message Bubbles**:
+  - Outgoing: Black bg (#000), white text
+  - Incoming: Light gray bg (#f0f0f0), black text, 1px border (#e0e0e0)
+- **Active Chat**: Black background (#000) with white text in sidebar
+- **Hover States**: Light gray (#f5f5f5)
+- **Borders**: Light gray (#e0e0e0) 1px, or black (#000000) 2px for emphasis
+- **Buttons**:
+  - Primary: Black bg, white text
+  - Secondary: White bg, black border, black text
+- **Avatars**: Black circle (#000) with white initial letter
+- **Scrollbars**: Thin gray (#cccccc) with rounded corners
 
 ## 9. Docker Configuration
 
@@ -434,6 +585,8 @@ services:
       DB_PASSWORD: messenger
       DB_NAME: messenger
       DB_SSLMODE: disable
+      DEFAULT_USER: admin
+      DEFAULT_PASSWORD: admin123
     ports:
       - "8080:8080"
     depends_on:
@@ -447,7 +600,7 @@ volumes:
 ### 9.3 Production Deployment (cloud-init)
 - Install Docker and Docker Compose
 - Create `/opt/messenger/` directory
-- Write `.env` file with secrets
+- Write `.env` file with secrets (including DEFAULT_USER, DEFAULT_PASSWORD)
 - Write `docker-compose.yml` with PostgreSQL + App
 - Write `init.sql` with schema
 - Systemd service to manage docker-compose
@@ -470,22 +623,25 @@ volumes:
    - Type: standard-v3 (2 cores, 4GB RAM, 20GB SSD)
    - Public IP via NAT
    - cloud-init user-data for provisioning
+   - **Unique naming**: `messenger-backend-YYYYMMDD-hhmm` timestamp suffix
 
 ### 10.2 VM Lifecycle Strategy
 - **Create Before Destroy**: Новая VM создаётся перед удалением старой
 - **Zero Downtime**: Пока старая VM работает, новая разворачивается и запускается
 - **Immutable Infrastructure**: Каждый деплой = чистая VM с актуальным образом
 - **Automatic Cleanup**: Старая VM удаляется после успешного создания новой
+- **Unique Names**: VM names include timestamp to avoid conflicts during create-before-destroy
 
 ### 10.3 Cloud-init Stages
 1. Update packages
 2. Install Docker & Docker Compose
 3. Create `/opt/messenger/` structure
-4. Write configuration files (.env, docker-compose.yml, init.sql)
+4. Write configuration files (.env, docker-compose.yml, init.sql) - includes DEFAULT_USER/DEFAULT_PASSWORD
 5. Start messenger systemd service
 6. Docker Compose pulls and starts containers
+7. App seeds default user on first startup
 
-### 10.3 Variables
+### 10.4 Variables
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | yc_token | string | - | YC OAuth token |
@@ -496,6 +652,8 @@ volumes:
 | jwt_secret | string | - | JWT signing secret |
 | db_password | string | - | PostgreSQL password |
 | http_addr | string | `:8080` | Server bind address |
+| default_user | string | - | Default username for seeding |
+| default_password | string | - | Default password for seeding |
 
 ## 11. CI/CD Pipeline
 
@@ -535,6 +693,8 @@ volumes:
 - `TF_STATE_BUCKET`
 - `JWT_SECRET`
 - `DB_PASSWORD`
+- `DEFAULT_USER` (NEW)
+- `DEFAULT_PASSWORD` (NEW)
 
 ### 11.3 Required Variables
 - `YC_CLOUD_ID`
@@ -575,18 +735,25 @@ golang.org/x/crypto v0.18.0
 - 404: Not Found
 - 500: Internal Server Error
 
-### 13.2 Error Response Format
+### 13.2 Validation Errors (400)
+- `username must be between 5 and 16 characters`
+- `password must be at least 5 characters`
+- `username already taken`
+- `receiver not found`
+
+### 13.3 Error Response Format
 ```json
 {
   "error": "human readable message"
 }
 ```
 
-### 13.3 Graceful Degradation
+### 13.4 Graceful Degradation
 - If PostgreSQL unavailable: App starts in "degraded" mode
 - Health endpoint returns 503 when DB down
 - Registration/login fail with clear error messages
 - WebSocket works with in-memory message delivery (no persistence)
+- Default user seeding failure does not block startup
 
 ## 14. Security Considerations
 
@@ -595,6 +762,7 @@ golang.org/x/crypto v0.18.0
 - 24h default expiration (configurable)
 - bcrypt password hashing (adaptive cost)
 - No sensitive data in JWT payload
+- **Validation**: Username 5-16 chars, password min 5 chars
 
 ### 14.2 Database
 - Prepared statements via pgx (SQL injection protection)
@@ -607,6 +775,7 @@ golang.org/x/crypto v0.18.0
 - Security groups restrict ports
 - Secrets via environment variables (never committed)
 - Terraform state in encrypted S3 bucket
+- Default credentials via GitHub Secrets (never in code)
 
 ## 15. Testing Strategy
 
@@ -614,16 +783,19 @@ golang.org/x/crypto v0.18.0
 - Authentication service (token generation/validation)
 - Password hashing (bcrypt)
 - Repository methods (mocked DB)
+- Validation logic (username/password length)
 
 ### 15.2 Integration Tests
 - Full HTTP API flow
 - WebSocket connection and message routing
 - Database migrations
+- Default user seeding on startup
 
 ### 15.3 End-to-End
 - Docker Compose local deployment
 - Terraform plan validation
 - CI/CD pipeline dry-run
+- "New Chat" flow testing
 
 ## 16. Deployment Checklist
 
@@ -633,18 +805,20 @@ golang.org/x/crypto v0.18.0
 3. Create S3 bucket for Terraform state
 4. Create service account with storage.editor role
 5. Generate S3 access keys
-6. Set all GitHub Secrets
+6. Set all GitHub Secrets (including DEFAULT_USER, DEFAULT_PASSWORD)
 7. Set all GitHub Variables
 8. Push to main branch
 9. Verify deployment in Actions logs
 10. Test endpoints: health, register, login, WebSocket
+11. Verify default user created (if configured)
 
 ### 16.2 Subsequent Deployments
 1. Push changes to main
 2. CI/CD automatically builds new image
-3. Terraform recreates VM with new image
+3. Terraform recreates VM with new image (unique name with timestamp)
 4. Docker Compose starts services
-5. Verify in browser: `http://<public_ip>:8080`
+5. App seeds default user if configured
+6. Verify in browser: `http://<public_ip>:8080`
 
 ## 17. Troubleshooting
 
@@ -664,6 +838,15 @@ golang.org/x/crypto v0.18.0
 - Review serial console logs
 - Verify template variables substituted correctly
 
+**Default user not created**:
+- Check app logs for seeding messages
+- Verify DEFAULT_USER and DEFAULT_PASSWORD in `.env`
+- Ensure database connection successful
+
+**VM creation fails with "AlreadyExists"**:
+- VM naming now includes timestamp (fixed)
+- Verify no orphaned VMs with similar names
+
 ### 17.2 Debug Commands
 ```bash
 # VM access via serial console
@@ -680,6 +863,9 @@ psql -h localhost -U messenger -d messenger
 
 # Check environment
 cat /opt/messenger/.env
+
+# View app logs for default user seeding
+docker logs messenger-app | grep -i "default user"
 ```
 
 ## 18. Future Enhancements
@@ -692,6 +878,8 @@ cat /opt/messenger/.env
 - Message search (PostgreSQL full-text)
 - Rate limiting
 - Admin dashboard
+- User avatars
+- Message read receipts
 
 ### 18.2 Scaling
 - Separate PostgreSQL to managed service (Yandex Managed PostgreSQL)
@@ -715,6 +903,7 @@ When modifying this project, maintain:
 4. **Immutable infrastructure**: Recreate, don't mutate
 5. **12-factor app**: Config via env vars
 6. **API compatibility**: Version endpoints if breaking changes
+7. **Validation**: Username 5-16 chars, password min 5 chars
 
 ### 19.1 Adding New Endpoints
 1. Add handler to `internal/http/handler.go`
@@ -737,6 +926,13 @@ When modifying this project, maintain:
 4. Test deployment in dev environment
 5. Document changes in this spec
 
+### 19.4 Adding Frontend Features
+1. Update `web/index.html` for structure
+2. Update `web/style.css` for styling (maintain white bg, black text)
+3. Update `web/app.js` for logic
+4. Test responsive design
+5. Update this spec's Frontend section
+
 ## 20. Contact & Support
 
 - **Repository**: GitHub
@@ -746,6 +942,33 @@ When modifying this project, maintain:
 
 ---
 
-**Version**: 1.0  
+**Version**: 1.2  
 **Last Updated**: 2026-02-03  
 **Maintainer**: AI Assistant
+
+## Changelog
+
+### Version 1.2 (2026-02-03)
+- **Major UI Redesign**: Telegram-like two-panel interface
+  - Left sidebar: Chat list with avatars, usernames, message previews, timestamps
+  - Right panel: Chat window with message bubbles, input area, header
+  - Message bubbles: Outgoing (blue bg, white text) / Incoming (gray bg, black text)
+- **New API Endpoint**: `GET /api/chats` - Returns formatted chat list with last message data
+- **Enhanced Storage**: `GetChatList()` method for efficient chat list queries
+- **Frontend Features**:
+  - Local time conversion for all timestamps
+  - Smart time formatting (Today: HH:MM, Yesterday, or MMM DD)
+  - Auto-resizing message input
+  - Smooth animations and transitions
+  - Responsive design for mobile
+  - Enhanced "New Chat" modal with search and filtering
+
+### Version 1.1 (2026-02-03)
+- Added validation: username 5-16 characters, password minimum 5 characters
+- Added default user seeding (DEFAULT_USER, DEFAULT_PASSWORD)
+- Added new API endpoints: GET /api/users, GET /api/conversations
+- Added storage methods: GetAll(), GetConversationPartners()
+- Updated frontend: white background, black text styling
+- Added "New Chat" functionality with user filtering
+- Updated Terraform: unique VM naming with timestamp, new variables
+- Updated CI/CD: DEFAULT_USER and DEFAULT_PASSWORD secrets

@@ -1,35 +1,68 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title></title>
+    <title>Messenger</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <div id="app">
+        <!-- Authentication Section -->
         <div id="auth-section">
-            <div id="login-form">
-                <input type="text" id="username" placeholder="Username" autocomplete="off">
+            <div id="auth-card">
+                <h2 id="auth-title">Messenger</h2>
+                <input type="text" id="username" placeholder="Username" autocomplete="off" maxlength="16">
                 <input type="password" id="password" placeholder="Password">
-                <button onclick="login()">Login</button>
-                <button onclick="register()">Register</button>
+                <button onclick="login()" class="btn-primary">Login</button>
+                <button onclick="register()" class="btn-secondary">Create Account</button>
                 <div id="auth-error"></div>
+                <div id="auth-hint">Username: 5-16 characters<br>Password: minimum 5 characters</div>
             </div>
         </div>
 
+        <!-- Chat Section - Two Panel Layout -->
         <div id="chat-section" style="display: none;">
+            <!-- Left Sidebar - Chat List -->
             <div id="sidebar">
-                <div id="user-info"></div>
-                <div id="contacts"></div>
-                <button onclick="showNewChatModal()">New Chat</button>
-                <button onclick="logout()">Logout</button>
+                <div id="sidebar-header">
+                    <h3 id="sidebar-title">Chats</h3>
+                    <button onclick="showNewChatModal()" id="new-chat-btn" title="New Chat">+</button>
+                </div>
+                <div id="contacts-list">
+                    <!-- Chat items will be rendered here -->
+                </div>
+                <div id="sidebar-footer">
+                    <span id="current-user">User</span>
+                    <button onclick="logout()" id="logout-btn">Logout</button>
+                </div>
             </div>
-            <div id="chat">
-                <div id="messages"></div>
-                <div id="input-area">
-                    <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
-                    <button onclick="sendMessage()">Send</button>
+
+            <!-- Right Panel - Chat Window -->
+            <div id="chat-window">
+                <!-- Empty State -->
+                <div id="empty-state">
+                    <div id="empty-icon">💬</div>
+                    <p>Select a chat to start messaging</p>
+                    <button onclick="showNewChatModal()" class="btn-primary">Start New Chat</button>
+                </div>
+
+                <!-- Active Chat -->
+                <div id="active-chat" style="display: none;">
+                    <div id="chat-header">
+                        <div id="chat-avatar"></div>
+                        <div id="chat-info">
+                            <div id="chat-username"></div>
+                            <div id="chat-status"></div>
+                        </div>
+                    </div>
+                    <div id="messages-container">
+                        <div id="messages"></div>
+                    </div>
+                    <div id="input-area">
+                        <textarea id="message-input" placeholder="Type a message..." rows="1"></textarea>
+                        <button onclick="sendMessage()" id="send-btn">➤</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -39,10 +72,19 @@
     <div id="new-chat-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <span class="modal-title">Start New Chat</span>
-                <span class="close-btn" onclick="closeNewChatModal()">&times;</span>
+                <h3>New Chat</h3>
+                <button onclick="closeNewChatModal()" class="modal-close">&times;</button>
             </div>
-            <ul id="user-list" class="user-list"></ul>
+            <div class="modal-body">
+                <input type="text" id="new-chat-search" placeholder="Search users..." autocomplete="off">
+                <div id="new-chat-error" class="error-message"></div>
+                <div id="user-list-container">
+                    <ul id="user-list"></ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeNewChatModal()" class="btn-secondary">Cancel</button>
+            </div>
         </div>
     </div>
 
