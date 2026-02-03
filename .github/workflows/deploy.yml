@@ -11,7 +11,45 @@ env:
   TF_ROOT: terraform/envs/dev
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.filter.outputs.build }}
+      deploy: ${{ steps.filter.outputs.deploy }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Check changed files
+        id: filter
+        run: |
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD || echo "")
+          echo "Changed files: $CHANGED_FILES"
+          
+          # Build: только изменения в коде приложения
+          BUILD_PATTERN='^(Dockerfile|docker-compose\.yml|go\.mod|go\.sum|cmd/|internal/|web/|migrations/)'
+          if echo "$CHANGED_FILES" | grep -qE "$BUILD_PATTERN"; then
+            echo "build=true" >> $GITHUB_OUTPUT
+            echo "✓ Build files changed"
+          else
+            echo "build=false" >> $GITHUB_OUTPUT
+            echo "✗ No build files changed"
+          fi
+          
+          # Deploy: код + terraform + workflow
+          DEPLOY_PATTERN='^(Dockerfile|docker-compose\.yml|go\.mod|go\.sum|cmd/|internal/|web/|migrations/|terraform/|.github/workflows/)'
+          if echo "$CHANGED_FILES" | grep -qE "$DEPLOY_PATTERN"; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+            echo "✓ Deploy files changed"
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+            echo "✗ No deploy files changed"
+          fi
+
   build:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,16 +57,25 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Skip if no build needed
+        if: needs.changes.outputs.build == 'false'
+        run: |
+          echo "No build needed - skipping Docker build"
+          exit 0
+
       - name: Setup Docker Buildx
+        if: needs.changes.outputs.build == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
+        if: needs.changes.outputs.build == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract metadata
+        if: needs.changes.outputs.build == 'true'
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -40,6 +87,7 @@ jobs:
             latest
 
       - name: Build and push
+        if: needs.changes.outputs.build == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -48,7 +96,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   deploy:
-    needs: build
+    needs: [changes, build]
+    if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
