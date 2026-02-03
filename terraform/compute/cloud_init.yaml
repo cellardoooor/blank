@@ -14,10 +14,8 @@ packages:
 write_files:
   - path: /opt/messenger/docker-compose.yml
     permissions: '0644'
-    owner: root:root
     content: |
       version: '3.8'
-
       services:
         postgres:
           image: postgres:15-alpine
@@ -39,7 +37,6 @@ write_files:
             retries: 5
           networks:
             - messenger-network
-
         app:
           image: ${docker_image}
           container_name: messenger-app
@@ -53,29 +50,23 @@ write_files:
           networks:
             - messenger-network
           restart: unless-stopped
-
       volumes:
         postgres_data:
-
       networks:
         messenger-network:
           driver: bridge
 
   - path: /opt/messenger/init.sql
     permissions: '0644'
-    owner: root:root
     content: |
       CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-
       CREATE TABLE IF NOT EXISTS users (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           username VARCHAR(50) UNIQUE NOT NULL,
           password_hash VARCHAR(255) NOT NULL,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
-
       CREATE INDEX idx_users_username ON users(username);
-
       CREATE TABLE IF NOT EXISTS messages (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -83,13 +74,20 @@ write_files:
           payload BYTEA NOT NULL,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
-
       CREATE INDEX idx_messages_sender ON messages(sender_id);
       CREATE INDEX idx_messages_receiver ON messages(receiver_id);
       CREATE INDEX idx_messages_created ON messages(created_at DESC);
 
+  - path: /opt/messenger/start.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      cd /opt/messenger
+      docker compose down 2>/dev/null || true
+      docker compose pull app
+      docker compose up -d
+
 runcmd:
-  # Install Docker
   - install -m 0755 -d /etc/apt/keyrings
   - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
   - chmod a+r /etc/apt/keyrings/docker.gpg
@@ -99,57 +97,24 @@ runcmd:
   - systemctl start docker
   - systemctl enable docker
   - usermod -aG docker ubuntu
-
-  # Create directory
   - mkdir -p /opt/messenger
-  - chown -R root:root /opt/messenger
-
-  # Create systemd service file via shell (avoids YAML parsing issues)
-  - |
-    cat > /etc/systemd/system/messenger.service << 'EOF'
-    [Unit]
-    Description=Messenger Application with PostgreSQL
-    Requires=docker.service
-    After=docker.service
-    
-    [Service]
-    Type=oneshot
-    RemainAfterExit=yes
-    WorkingDirectory=/opt/messenger
-    ExecStartPre=-/usr/bin/docker compose down
-    ExecStartPre=/usr/bin/docker compose pull app
-    ExecStart=/usr/bin/docker compose up -d
-    ExecStop=/usr/bin/docker compose down
-    ExecReload=/usr/bin/docker compose restart
-    
-    [Install]
-    WantedBy=multi-user.target
-    EOF
-  - chmod 644 /etc/systemd/system/messenger.service
-
-  # Decode base64 secrets and create .env file
   - |
     JWT_SECRET=$(echo '${jwt_secret_b64}' | base64 -d)
     DB_PASSWORD=$(echo '${db_password_b64}' | base64 -d)
-    printf '%s\n' \
-      "HTTP_ADDR=:8080" \
-      "JWT_SECRET=$JWT_SECRET" \
-      "JWT_DURATION=${jwt_duration}" \
-      "DB_HOST=postgres" \
-      "DB_PORT=5432" \
-      "DB_USER=messenger" \
-      "DB_PASSWORD=$DB_PASSWORD" \
-      "DB_NAME=messenger" \
-      "DB_SSLMODE=disable" \
-      "POSTGRES_PASSWORD=$DB_PASSWORD" \
-      > /opt/messenger/.env
+    echo "HTTP_ADDR=:8080" > /opt/messenger/.env
+    echo "JWT_SECRET=$JWT_SECRET" >> /opt/messenger/.env
+    echo "JWT_DURATION=${jwt_duration}" >> /opt/messenger/.env
+    echo "DB_HOST=postgres" >> /opt/messenger/.env
+    echo "DB_PORT=5432" >> /opt/messenger/.env
+    echo "DB_USER=messenger" >> /opt/messenger/.env
+    echo "DB_PASSWORD=$DB_PASSWORD" >> /opt/messenger/.env
+    echo "DB_NAME=messenger" >> /opt/messenger/.env
+    echo "DB_SSLMODE=disable" >> /opt/messenger/.env
+    echo "POSTGRES_PASSWORD=$DB_PASSWORD" >> /opt/messenger/.env
   - chmod 600 /opt/messenger/.env
-
-  # Reload and start service
-  - systemctl daemon-reload
-  - systemctl enable messenger
-  - systemctl start messenger
-
-  # Wait for services and show logs
+  - chmod +x /opt/messenger/start.sh
+  - echo "@reboot root /opt/messenger/start.sh >> /var/log/messenger-startup.log 2>&1" > /etc/cron.d/messenger
+  - chmod 644 /etc/cron.d/messenger
+  - /opt/messenger/start.sh
   - sleep 30
   - docker compose -f /opt/messenger/docker-compose.yml logs
