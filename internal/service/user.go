@@ -30,3 +30,10 @@ func (s *UserService) GetByUsername(ctx context.Context, username string) (*mode
 	}
 	return s.repo.GetByUsername(ctx, username)
 }
+
+func (s *UserService) GetAll(ctx context.Context) ([]model.User, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("database unavailable")
+	}
+	return s.repo.GetAll(ctx)
+}

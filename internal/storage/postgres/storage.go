@@ -110,6 +110,26 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*model.U
 	return user, nil
 }
 
+func (r *UserRepo) GetAll(ctx context.Context) ([]model.User, error) {
+	conn := getConn(ctx, r.pool)
+	sql := `SELECT id, username, password_hash, created_at FROM users ORDER BY username`
+	rows, err := conn.Query(ctx, sql)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []model.User
+	for rows.Next() {
+		var user model.User
+		if err := rows.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, rows.Err()
+}
+
 type MessageRepo struct {
 	pool *pgxpool.Pool
 }
@@ -141,4 +161,30 @@ func (r *MessageRepo) GetByUserPair(ctx context.Context, user1, user2 uuid.UUID,
 		messages = append(messages, msg)
 	}
 	return messages, rows.Err()
+}
+
+func (r *MessageRepo) GetConversationPartners(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	conn := getConn(ctx, r.pool)
+	sql := `
+		SELECT DISTINCT CASE 
+			WHEN sender_id = $1 THEN receiver_id 
+			ELSE sender_id 
+		END as partner_id 
+		FROM messages 
+		WHERE sender_id = $1 OR receiver_id = $1`
+	rows, err := conn.Query(ctx, sql, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var partners []uuid.UUID
+	for rows.Next() {
+		var partnerID uuid.UUID
+		if err := rows.Scan(&partnerID); err != nil {
+			return nil, err
+		}
+		partners = append(partners, partnerID)
+	}
+	return partners, rows.Err()
 }

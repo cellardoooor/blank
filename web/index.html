@@ -22,6 +22,7 @@
             <div id="sidebar">
                 <div id="user-info"></div>
                 <div id="contacts"></div>
+                <button onclick="showNewChatModal()">New Chat</button>
                 <button onclick="logout()">Logout</button>
             </div>
             <div id="chat">
@@ -33,6 +34,18 @@
             </div>
         </div>
     </div>
+
+    <!-- New Chat Modal -->
+    <div id="new-chat-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title">Start New Chat</span>
+                <span class="close-btn" onclick="closeNewChatModal()">&times;</span>
+            </div>
+            <ul id="user-list" class="user-list"></ul>
+        </div>
+    </div>
+
     <script src="/app.js"></script>
 </body>
 </html>

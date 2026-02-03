@@ -61,3 +61,10 @@ func (s *MessageService) GetHistory(ctx context.Context, user1, user2 uuid.UUID,
 	}
 	return s.repo.GetByUserPair(ctx, user1, user2, limit, offset)
 }
+
+func (s *MessageService) GetConversationPartners(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("database unavailable")
+	}
+	return s.repo.GetConversationPartners(ctx, userID)
+}

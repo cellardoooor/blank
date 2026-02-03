@@ -13,8 +13,8 @@
 }
 
 body {
-    background: #000;
-    color: #fff;
+    background: #fff;
+    color: #000;
     height: 100vh;
 }
 
@@ -31,9 +31,9 @@ body {
 }
 
 #login-form {
-    background: #000;
+    background: #fff;
     padding: 2rem;
-    border: 2px solid #fff;
+    border: 2px solid #000;
     width: 300px;
 }
 
@@ -41,9 +41,9 @@ body {
     width: 100%;
     padding: 12px;
     margin-bottom: 1rem;
-    background: #000;
-    color: #fff;
-    border: 2px solid #fff;
+    background: #fff;
+    color: #000;
+    border: 2px solid #000;
     font-size: 14px;
 }
 
@@ -55,20 +55,20 @@ body {
     width: 100%;
     padding: 12px;
     margin-bottom: 0.5rem;
-    background: #fff;
-    color: #000;
-    border: 2px solid #fff;
+    background: #000;
+    color: #fff;
+    border: 2px solid #000;
     cursor: pointer;
     font-size: 14px;
 }
 
 #login-form button:hover {
-    background: #000;
-    color: #fff;
+    background: #fff;
+    color: #000;
 }
 
 #auth-error {
-    color: #fff;
+    color: #000;
     font-size: 14px;
     margin-top: 0.5rem;
 }
@@ -80,16 +80,16 @@ body {
 
 #sidebar {
     width: 300px;
-    background: #000;
-    border-right: 2px solid #fff;
+    background: #fff;
+    border-right: 2px solid #000;
     display: flex;
     flex-direction: column;
 }
 
 #user-info {
     padding: 1rem;
-    border-bottom: 2px solid #fff;
-    color: #fff;
+    border-bottom: 2px solid #000;
+    color: #000;
 }
 
 #contacts {
@@ -100,38 +100,38 @@ body {
 .contact {
     padding: 1rem;
     cursor: pointer;
-    border-bottom: 1px solid #333;
-    color: #fff;
+    border-bottom: 1px solid #ccc;
+    color: #000;
 }
 
 .contact:hover {
-    background: #333;
+    background: #ddd;
 }
 
 .contact.active {
-    background: #fff;
-    color: #000;
+    background: #000;
+    color: #fff;
 }
 
 #sidebar button {
     margin: 1rem;
     padding: 10px;
-    background: #fff;
-    color: #000;
-    border: 2px solid #fff;
+    background: #000;
+    color: #fff;
+    border: 2px solid #000;
     cursor: pointer;
 }
 
 #sidebar button:hover {
-    background: #000;
-    color: #fff;
+    background: #fff;
+    color: #000;
 }
 
 #chat {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: #000;
+    background: #fff;
 }
 
 #messages {
@@ -144,19 +144,19 @@ body {
     max-width: 70%;
     margin-bottom: 1rem;
     padding: 0.75rem 1rem;
-    border: 2px solid #fff;
+    border: 2px solid #000;
     word-wrap: break-word;
 }
 
 .message.sent {
-    background: #fff;
-    color: #000;
+    background: #000;
+    color: #fff;
     margin-left: auto;
 }
 
 .message.received {
-    background: #000;
-    color: #fff;
+    background: #fff;
+    color: #000;
 }
 
 .message-time {
@@ -168,15 +168,15 @@ body {
 #input-area {
     display: flex;
     padding: 1rem;
-    border-top: 2px solid #fff;
+    border-top: 2px solid #000;
 }
 
 #message-input {
     flex: 1;
     padding: 12px;
-    background: #000;
-    color: #fff;
-    border: 2px solid #fff;
+    background: #fff;
+    color: #000;
+    border: 2px solid #000;
     font-size: 14px;
 }
 
@@ -187,13 +187,87 @@ body {
 #input-area button {
     margin-left: 1rem;
     padding: 12px 24px;
-    background: #fff;
-    color: #000;
-    border: 2px solid #fff;
+    background: #000;
+    color: #fff;
+    border: 2px solid #000;
     cursor: pointer;
 }
 
 #input-area button:hover {
-    background: #000;
-    color: #fff;
+    background: #fff;
+    color: #000;
+}
+
+/* Modal styles for new chat */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: #fff;
+    margin: 15% auto;
+    padding: 20px;
+    border: 2px solid #000;
+    width: 400px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #000;
+    padding-bottom: 0.5rem;
+}
+
+.modal-title {
+    font-size: 18px;
+    color: #000;
+}
+
+.close-btn {
+    color: #000;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close-btn:hover {
+    color: #666;
+}
+
+.user-list {
+    list-style: none;
+}
+
+.user-list-item {
+    padding: 12px;
+    border-bottom: 1px solid #ccc;
+    cursor: pointer;
+    color: #000;
+}
+
+.user-list-item:hover {
+    background-color: #ddd;
+}
+
+.user-list-item.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: #f0f0f0;
+}
+
+.no-users {
+    text-align: center;
+    color: #666;
+    padding: 2rem;
 }

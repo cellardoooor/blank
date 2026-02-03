@@ -75,6 +75,16 @@ func (s *Service) Register(ctx context.Context, username, password string) (*mod
 		return nil, fmt.Errorf("database unavailable")
 	}
 
+	// Validate username length: 5-16 characters
+	if len(username) < 5 || len(username) > 16 {
+		return nil, fmt.Errorf("username must be between 5 and 16 characters")
+	}
+
+	// Validate password length: minimum 5 characters
+	if len(password) < 5 {
+		return nil, fmt.Errorf("password must be at least 5 characters")
+	}
+
 	existing, err := s.userRepo.GetByUsername(ctx, username)
 	if err != nil {
 		return nil, err

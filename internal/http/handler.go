@@ -33,7 +33,9 @@ func (h *Handler) Router() *mux.Router {
 
 	api := r.PathPrefix("/api").Subrouter()
 	api.Use(auth.Middleware(h.authService))
+	api.HandleFunc("/users", h.listUsers).Methods("GET")
 	api.HandleFunc("/users/{id}", h.getUser).Methods("GET")
+	api.HandleFunc("/conversations", h.getConversations).Methods("GET")
 	api.HandleFunc("/messages", h.sendMessage).Methods("POST")
 	api.HandleFunc("/messages/{user_id}", h.getMessages).Methods("GET")
 
@@ -100,6 +102,27 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"token": token})
+}
+
+func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := h.userService.GetAll(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to get users")
+		return
+	}
+	respondJSON(w, http.StatusOK, users)
+}
+
+func (h *Handler) getConversations(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	partners, err := h.messageService.GetConversationPartners(r.Context(), userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to get conversations")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, partners)
 }
 
 func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
