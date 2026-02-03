@@ -33,6 +33,7 @@ func (h *Handler) Router() *mux.Router {
 
 	api := r.PathPrefix("/api").Subrouter()
 	api.Use(auth.Middleware(h.authService))
+	api.HandleFunc("/me", h.getCurrentUser).Methods("GET")
 	api.HandleFunc("/users", h.listUsers).Methods("GET")
 	api.HandleFunc("/users/{id}", h.getUser).Methods("GET")
 	api.HandleFunc("/conversations", h.getConversations).Methods("GET")
@@ -105,7 +106,39 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"token": token})
 }
 
+func (h *Handler) getCurrentUser(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	user, err := h.userService.GetByID(r.Context(), userID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to get user")
+		return
+	}
+	if user == nil {
+		respondError(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, user)
+}
+
 func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
+	usernameQuery := r.URL.Query().Get("username")
+
+	if usernameQuery != "" {
+		user, err := h.userService.GetByUsername(r.Context(), usernameQuery)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed to get user")
+			return
+		}
+		if user == nil {
+			respondError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		respondJSON(w, http.StatusOK, user)
+		return
+	}
+
 	users, err := h.userService.GetAll(r.Context())
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to get users")

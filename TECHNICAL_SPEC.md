@@ -206,9 +206,11 @@ Authenticate user.
 ```
 
 #### GET /api/users
-Get list of all users (requires auth). Used for "New Chat" functionality.
+Get list of all users or search by username (requires auth). Used for "New Chat" functionality.
 ```json
-// Response 200
+// Query params: ?username=<username>
+
+// Response 200 (without query - all users, exclude self)
 [
   {
     "id": "uuid",
@@ -216,6 +218,18 @@ Get list of all users (requires auth). Used for "New Chat" functionality.
     "created_at": "timestamp"
   }
 ]
+
+// Response 200 (with username query - single user)
+{
+  "id": "uuid",
+  "username": "string",
+  "created_at": "timestamp"
+}
+
+// Response 404 (username not found)
+{
+  "error": "user not found"
+}
 ```
 
 #### GET /api/users/{id}
@@ -231,6 +245,16 @@ Get user by ID (requires auth).
 // Response 404
 {
   "error": "user not found"
+}
+```
+
+#### GET /api/me
+Get current user info from JWT token (requires auth).
+```json
+// Response 200
+{
+  "id": "uuid",
+  "username": "string"
 }
 ```
 
@@ -435,7 +459,7 @@ host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<m
 ## 8. Frontend Specification
 
 ### 8.1 Features
-- User registration and login with validation (username 5-16 chars, password min 5)
+- User registration and login
 - Real-time messaging via WebSocket
 - **Telegram-like Two-Panel Layout**:
   - Left sidebar: Chat list with avatars, usernames, message previews, timestamps
@@ -485,6 +509,7 @@ host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<m
     - Today: "HH:MM" (e.g., "15:30")
     - Yesterday: "Yesterday"
     - Older: "MMM DD" (e.g., "Feb 28")
+- **Empty List**: When no chats exist, shows "New Chat" button at bottom
 - **Footer**: Current user name + Logout button
 
 ### 8.6 Chat Window (Right Panel)
@@ -496,19 +521,25 @@ host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<m
     - Same day: "HH:MM" ("15:30")
     - Different day: "MMM DD, HH:MM" ("Feb 28, 15:30")
 - **Input Area**: Auto-resizing textarea + Send button
+- **Empty State**:
+  - When no chats exist, right panel shows blank white space
+  - No icons, no text, no buttons in empty state
+  - "New Chat" button remains in sidebar (normal position)
+  - "New Chat" button displayed at bottom of contacts list when empty
 
 ### 8.7 New Chat Modal
 1. Click "+" button in sidebar
-2. Modal opens with search input
-3. User list shows all users except:
-   - Current user (self)
-   - Users with existing conversations (grayed out with "Already chatting")
-4. Search filters users by username
-5. Click on available user to start chat
-6. Validation:
-   - If user exists and no conversation: Open new chat
-   - If user exists with conversation: Show warning, highlight existing chat
-   - If user doesn't exist: Show error
+2. Modal opens with single username input field
+3. User types username and:
+   - Presses Enter key, OR
+   - Clicks "Create Chat" button
+4. Validation:
+   - If username empty: Show "Username required" error below input
+   - If user not found: Show "User not found" error below input
+   - If user exists: Create new chat and open it
+   - If chat already exists with user: Open existing chat
+5. Errors displayed below input in black text
+6. "Cancel" button closes modal without action
 
 ### 8.8 Timezone & Localization
 - All timestamps converted to browser's local time
@@ -518,6 +549,13 @@ host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<m
 ### 8.9 Styling (Telegram-like)
 - **Background**: White (#ffffff) for all containers
 - **Text**: Black (#000000) for primary text
+- **Error Messages**: Black color (#000000) for all error text
+- **Secondary Text**: Gray (#666666 or #999999) for less important elements:
+  - Timestamps
+  - Placeholder text
+  - Hints
+  - Status indicators
+- **All User-Facing Text**: English only, no translations
 - **Message Bubbles**:
   - Outgoing: Black bg (#000), white text
   - Incoming: Light gray bg (#f0f0f0), black text, 1px border (#e0e0e0)
@@ -736,6 +774,8 @@ golang.org/x/crypto v0.18.0
 - 500: Internal Server Error
 
 ### 13.2 Validation Errors (400)
+- `Username required`
+- `User not found`
 - `username must be between 5 and 16 characters`
 - `password must be at least 5 characters`
 - `username already taken`
@@ -744,7 +784,7 @@ golang.org/x/crypto v0.18.0
 ### 13.3 Error Response Format
 ```json
 {
-  "error": "human readable message"
+  "error": "human readable message in English"
 }
 ```
 
@@ -942,11 +982,29 @@ When modifying this project, maintain:
 
 ---
 
-**Version**: 1.2  
-**Last Updated**: 2026-02-03  
+**Version**: 1.3
+**Last Updated**: 2026-02-03
 **Maintainer**: AI Assistant
 
 ## Changelog
+
+### Version 1.3 (2026-02-03)
+- **UI Cleanup**: Removed title and input limitation hints from authentication screen
+- **Enhanced API**: Added `GET /api/me` endpoint for current user info
+- **Updated API**: Enhanced `GET /api/users` endpoint with `?username=` query parameter support
+- **New Chat Modal Redesign**:
+  - Simplified to username-only input (no user list)
+  - Enter key and "Create Chat" button both submit
+  - Errors displayed below input
+  - "User not found" and "Username required" validation
+- **Empty State Redesign**: Blank white window when no chats exist
+  - No icons or text in empty chat area
+  - "New Chat" button in normal sidebar position
+  - Button displayed at bottom of contacts list when empty
+- **Styling Updates**:
+  - Error messages: Black color (#000000)
+  - Secondary text: Gray (#666666/#999999) for timestamps, placeholders, hints
+  - All UI text: English only
 
 ### Version 1.2 (2026-02-03)
 - **Major UI Redesign**: Telegram-like two-panel interface
