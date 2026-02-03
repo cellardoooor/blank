@@ -143,8 +143,8 @@ func (r *MessageRepo) Create(ctx context.Context, msg *model.Message) error {
 
 func (r *MessageRepo) GetByUserPair(ctx context.Context, user1, user2 uuid.UUID, limit, offset int) ([]model.Message, error) {
 	conn := getConn(ctx, r.pool)
-	sql := `SELECT id, sender_id, receiver_id, payload, created_at FROM messages 
-		WHERE (sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1) 
+	sql := `SELECT id, sender_id, receiver_id, payload, created_at FROM messages
+		WHERE (sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1)
 		ORDER BY created_at DESC LIMIT $3 OFFSET $4`
 	rows, err := conn.Query(ctx, sql, user1, user2, limit, offset)
 	if err != nil {
@@ -152,7 +152,7 @@ func (r *MessageRepo) GetByUserPair(ctx context.Context, user1, user2 uuid.UUID,
 	}
 	defer rows.Close()
 
-	var messages []model.Message
+	messages := []model.Message{}
 	for rows.Next() {
 		var msg model.Message
 		if err := rows.Scan(&msg.ID, &msg.SenderID, &msg.ReceiverID, &msg.Payload, &msg.CreatedAt); err != nil {
@@ -222,7 +222,7 @@ func (r *MessageRepo) GetChatList(ctx context.Context, userID uuid.UUID) ([]stor
 	}
 	defer rows.Close()
 
-	var chats []storage.ChatInfo
+	chats := []storage.ChatInfo{}
 	for rows.Next() {
 		var chat storage.ChatInfo
 		var msg model.Message

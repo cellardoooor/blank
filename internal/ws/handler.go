@@ -1,13 +1,16 @@
 package ws
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"messenger/internal/auth"
+	"messenger/internal/service"
 )
 
 var upgrader = websocket.Upgrader{
@@ -19,21 +22,24 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	hub      *Hub
-	conn     *websocket.Conn
-	send     chan Message
-	userID   uuid.UUID
+	hub            *Hub
+	conn           *websocket.Conn
+	send           chan Message
+	userID         uuid.UUID
+	messageService *service.MessageService
 }
 
 type Handler struct {
-	hub         *Hub
-	authService *auth.Service
+	hub            *Hub
+	authService    *auth.Service
+	messageService *service.MessageService
 }
 
-func NewHandler(hub *Hub, authSvc *auth.Service) *Handler {
+func NewHandler(hub *Hub, authSvc *auth.Service, msgSvc *service.MessageService) *Handler {
 	return &Handler{
-		hub:         hub,
-		authService: authSvc,
+		hub:            hub,
+		authService:    authSvc,
+		messageService: msgSvc,
 	}
 }
 
@@ -56,10 +62,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &Client{
-		hub:    h.hub,
-		conn:   conn,
-		send:   make(chan Message, 256),
-		userID: userID,
+		hub:            h.hub,
+		conn:           conn,
+		send:           make(chan Message, 256),
+		userID:         userID,
+		messageService: h.messageService,
 	}
 
 	h.hub.Register(client)
@@ -94,8 +101,19 @@ func (c *Client) readPump() {
 			continue
 		}
 
+		msg.ID = uuid.New()
 		msg.SenderID = c.userID
 		msg.Timestamp = time.Now().Unix()
+
+		// Save message to database
+		if c.messageService != nil {
+			ctx := context.Background()
+			_, err := c.messageService.Send(ctx, c.userID, msg.ReceiverID, msg.Payload)
+			if err != nil {
+				log.Printf("failed to save message: %v", err)
+			}
+		}
+
 		c.hub.Broadcast(msg)
 	}
 }
@@ -116,7 +134,25 @@ func (c *Client) writePump() {
 				return
 			}
 
-			data, err := json.Marshal(msg)
+			// Convert timestamp (Unix seconds) to ISO 8601 format
+			createdAt := time.Unix(msg.Timestamp, 0).Format(time.RFC3339)
+
+			// Convert to API message format
+			apiMsg := struct {
+				ID         uuid.UUID `json:"id"`
+				SenderID   uuid.UUID `json:"sender_id"`
+				ReceiverID uuid.UUID `json:"receiver_id"`
+				Payload    []byte    `json:"payload"`
+				CreatedAt  string    `json:"created_at"`
+			}{
+				ID:         msg.ID,
+				SenderID:   msg.SenderID,
+				ReceiverID: msg.ReceiverID,
+				Payload:    msg.Payload,
+				CreatedAt:  createdAt,
+			}
+
+			data, err := json.Marshal(apiMsg)
 			if err != nil {
 				continue
 			}

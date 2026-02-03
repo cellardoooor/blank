@@ -87,7 +87,7 @@ func (s *MessageService) GetChatList(ctx context.Context, userID uuid.UUID) ([]C
 		return nil, err
 	}
 
-	var result []ChatWithUser
+	result := []ChatWithUser{}
 	for _, chat := range chats {
 		user, err := s.userRepo.GetByID(ctx, chat.PartnerID)
 		if err != nil {

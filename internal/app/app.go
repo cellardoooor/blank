@@ -82,7 +82,7 @@ func (a *App) Init(ctx context.Context) error {
 		w.Write([]byte(`{"status":"` + status + `","database":"` + dbStatus + `"}`))
 	})
 
-	wsHandler := ws.NewHandler(a.hub, authService)
+	wsHandler := ws.NewHandler(a.hub, authService, messageService)
 	router.Handle("/ws", wsHandler)
 
 	a.router = router

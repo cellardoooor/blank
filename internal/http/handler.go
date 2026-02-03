@@ -119,7 +119,10 @@ func (h *Handler) getCurrentUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, user)
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"id":       user.ID,
+		"username": user.Username,
+	})
 }
 
 func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {

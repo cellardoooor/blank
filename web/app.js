@@ -295,17 +295,19 @@ function renderChatList() {
     const container = document.getElementById('contacts-list');
     const btnContainer = document.getElementById('empty-chat-btn-container');
     
+    // Get button element only once, not create it
+    const btn = btnContainer.querySelector('button');
+    
     // Sort chats by last message time (newest first)
     const sortedChats = Array.from(chats.values()).sort((a, b) => {
         return b.lastMessageTime - a.lastMessageTime;
     });
     
+    // Clear container but preserve btnContainer
+    container.innerHTML = '';
+    
     if (sortedChats.length === 0) {
-        container.innerHTML = '';
-        // Show new chat button at bottom
         btnContainer.style.display = 'flex';
-        // Move button to bottom of container
-        const btn = btnContainer.querySelector('button');
         container.appendChild(btnContainer);
         return;
     }
