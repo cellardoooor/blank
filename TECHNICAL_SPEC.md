@@ -80,7 +80,8 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 │   ├── app.js                 # JavaScript application (dynamic contacts, user filtering)
 │   └── style.css              # Styles (white bg, black text)
 ├── migrations/
-│   └── 001_init.sql           # Database schema
+│   ├── 001_init.sql           # Database schema
+│   └── 002_username_case_insensitive.sql  # Case-insensitive username index
 ├── terraform/                  # Infrastructure
 │   ├── network/               # VPC, subnet, security groups
 │   ├── compute/               # VM with cloud-init (unique naming with timestamp)
@@ -577,7 +578,7 @@ FROM golang:1.21-alpine AS builder
 RUN apk add --no-cache git ca-certificates tzdata
 WORKDIR /build
 COPY go.mod go.sum ./
-RUN go mod download
+RUN go mod tidy && go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server ./cmd/server
 

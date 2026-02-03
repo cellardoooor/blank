@@ -100,7 +100,7 @@ body {
 }
 
 #auth-error {
-    color: #dc3545;
+    color: #000000;
     font-size: 13px;
     margin-top: 8px;
     text-align: center;

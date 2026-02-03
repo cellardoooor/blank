@@ -31,13 +31,14 @@ func NewHandler(authSvc *auth.Service, userSvc *service.UserService, msgSvc *ser
 func (h *Handler) Router() *mux.Router {
 	r := mux.NewRouter()
 
-	r.HandleFunc("/api/health", h.healthCheck).Methods("GET")
-	r.HandleFunc("/api/auth/register", h.register).Methods("POST")
-	r.HandleFunc("/api/auth/login", h.login).Methods("POST")
+	r.Use(h.corsMiddleware())
+
+	r.HandleFunc("/api/health", h.healthCheck).Methods("GET", "OPTIONS")
+	r.HandleFunc("/api/auth/register", h.register).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/auth/login", h.login).Methods("POST", "OPTIONS")
 
 	api := r.PathPrefix("/api").Subrouter()
 	api.Use(auth.Middleware(h.authService))
-	api.Use(corsMiddleware())
 	api.HandleFunc("/me", h.getCurrentUser).Methods("GET")
 	api.HandleFunc("/users", h.listUsers).Methods("GET")
 	api.HandleFunc("/users/{id}", h.getUser).Methods("GET")
@@ -51,11 +52,15 @@ func (h *Handler) Router() *mux.Router {
 	return r
 }
 
-func corsMiddleware() mux.MiddlewareFunc {
+func (h *Handler) corsMiddleware() mux.MiddlewareFunc {
+	allowedOrigins := h.corsAllowed
+	if len(allowedOrigins) == 0 {
+		allowedOrigins = []string{"*"}
+	}
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"},
+		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"*"},
+		AllowedHeaders:   []string{"*", "Authorization", "Content-Type"},
 		AllowCredentials: true,
 		MaxAge:           86400,
 	})
@@ -206,7 +211,11 @@ func (h *Handler) getChats(w http.ResponseWriter, r *http.Request) {
 
 	// Add user info to each chat
 	for i := range chats {
-		user, err := h.userService.GetByID(r.Context(), uuid.MustParse(chats[i].UserID))
+		partnerID, err := uuid.Parse(chats[i].UserID)
+		if err != nil {
+			continue
+		}
+		user, err := h.userService.GetByID(r.Context(), partnerID)
 		if err == nil && user != nil {
 			chats[i].Username = user.Username
 		}

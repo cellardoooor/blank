@@ -67,21 +67,6 @@ func (a *App) Init(ctx context.Context) error {
 	httpHandler := httphandlers.NewHandler(authService, userService, messageService, a.config.CORSAllowed)
 	router := httpHandler.Router()
 
-	// Add health check endpoint
-	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		status := "healthy"
-		dbStatus := "connected"
-		if a.storage == nil {
-			status = "degraded"
-			dbStatus = "disconnected"
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if a.storage == nil {
-			w.WriteHeader(http.StatusServiceUnavailable)
-		}
-		w.Write([]byte(`{"status":"` + status + `","database":"` + dbStatus + `"}`))
-	})
-
 	wsHandler := ws.NewHandler(a.hub, authService, messageService)
 	router.Handle("/ws", wsHandler)
 
