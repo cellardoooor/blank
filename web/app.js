@@ -295,22 +295,53 @@ function renderChatList() {
     const container = document.getElementById('contacts-list');
     const btnContainer = document.getElementById('empty-chat-btn-container');
     
-    // Get button element only once, not create it
-    const btn = btnContainer.querySelector('button');
+    // Get button element if btnContainer exists
+    const btn = btnContainer ? btnContainer.querySelector('button') : null;
     
     // Sort chats by last message time (newest first)
     const sortedChats = Array.from(chats.values()).sort((a, b) => {
         return b.lastMessageTime - a.lastMessageTime;
     });
     
-    // Clear container but preserve btnContainer
+    // Clear container
     container.innerHTML = '';
     
     if (sortedChats.length === 0) {
-        btnContainer.style.display = 'flex';
-        container.appendChild(btnContainer);
+        if (btnContainer) {
+            btnContainer.style.display = 'flex';
+            container.appendChild(btnContainer);
+        }
         return;
     }
+    
+    // Hide button when there are chats
+    if (btnContainer) {
+        btnContainer.style.display = 'none';
+    }
+    
+    sortedChats.forEach(chat => {
+        const div = document.createElement('div');
+        div.className = 'chat-item' + (currentChat === chat.userId ? ' active' : '');
+        div.onclick = () => selectChat(chat.userId);
+        
+        const initial = chat.username.charAt(0).toUpperCase();
+        const timeStr = formatChatListTime(chat.lastMessageTime);
+        const preview = chat.lastMessage ? truncateText(chat.lastMessage, 30) : 'No messages yet';
+        
+        div.innerHTML = `
+            <div class="chat-avatar">${initial}</div>
+            <div class="chat-content">
+                <div class="chat-header-row">
+                    <div class="chat-username">${escapeHtml(chat.username)}</div>
+                    <div class="chat-time">${timeStr}</div>
+                </div>
+                <div class="chat-preview">${escapeHtml(preview)}</div>
+            </div>
+        `;
+        
+        container.appendChild(div);
+    });
+}
     
     // Hide button when there are chats
     btnContainer.style.display = 'none';
@@ -422,7 +453,12 @@ function sendMessage() {
         payload: Array.from(payload)
     };
     
-    ws.send(JSON.stringify(msg));
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+    } else {
+        console.warn('WebSocket not connected, message not sent');
+        return;
+    }
     
     // Clear input and resize
     input.value = '';

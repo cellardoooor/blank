@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX idx_users_username ON users(username);
+CREATE UNIQUE INDEX idx_users_username_lower ON users(LOWER(username));
 
 CREATE TABLE IF NOT EXISTS messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

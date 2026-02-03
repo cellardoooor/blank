@@ -67,6 +67,7 @@ write_files:
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
       CREATE INDEX idx_users_username ON users(username);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users(LOWER(username));
       CREATE TABLE IF NOT EXISTS messages (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

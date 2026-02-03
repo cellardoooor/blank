@@ -98,7 +98,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.User, erro
 
 func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*model.User, error) {
 	conn := getConn(ctx, r.pool)
-	sql := `SELECT id, username, password_hash, created_at FROM users WHERE username = $1`
+	sql := `SELECT id, username, password_hash, created_at FROM users WHERE LOWER(username) = LOWER($1)`
 	user := &model.User{}
 	err := conn.QueryRow(ctx, sql, username).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
