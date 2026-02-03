@@ -23,7 +23,7 @@ locals {
 }
 
 resource "yandex_compute_instance" "main" {
-  name        = var.instance_name
+  name        = "${var.instance_name}-${formatdate("YYYYMMDD-hhmm", timestamp())}"
   zone        = var.zone
   platform_id = "standard-v3"
 
