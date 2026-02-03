@@ -109,3 +109,16 @@ variable "app_port" {
   type        = number
   default     = 8080
 }
+
+variable "default_user" {
+  description = "Default user for messenger login"
+  type        = string
+  default     = ""
+}
+
+variable "default_password" {
+  description = "Default password for messenger login"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

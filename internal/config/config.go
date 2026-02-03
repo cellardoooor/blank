@@ -8,10 +8,12 @@ import (
 )
 
 type Config struct {
-	HTTPAddr    string
-	JWTSecret   []byte
-	JWTDuration time.Duration
-	DB          DatabaseConfig
+	HTTPAddr        string
+	JWTSecret       []byte
+	JWTDuration     time.Duration
+	DB              DatabaseConfig
+	DefaultUser     string
+	DefaultPassword string
 }
 
 type DatabaseConfig struct {
@@ -27,9 +29,11 @@ func Load() *Config {
 	godotenv.Load()
 
 	return &Config{
-		HTTPAddr:    getEnv("HTTP_ADDR", ":8080"),
-		JWTSecret:   []byte(getEnv("JWT_SECRET", "default-secret-change-in-production")),
-		JWTDuration: parseDuration(getEnv("JWT_DURATION", "24h")),
+		HTTPAddr:        getEnv("HTTP_ADDR", ":8080"),
+		JWTSecret:       []byte(getEnv("JWT_SECRET", "default-secret-change-in-production")),
+		JWTDuration:     parseDuration(getEnv("JWT_DURATION", "24h")),
+		DefaultUser:     getEnv("DEFAULT_USER", ""),
+		DefaultPassword: getEnv("DEFAULT_PASSWORD", ""),
 		DB: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     getEnv("DB_PORT", "5432"),

@@ -54,6 +54,13 @@ func (a *App) Init(ctx context.Context) error {
 	userService := service.NewUserService(userRepo)
 	messageService := service.NewMessageService(messageRepo, userRepo)
 
+	// Create default user if configured
+	if a.config.DefaultUser != "" && a.config.DefaultPassword != "" {
+		if err := a.ensureDefaultUser(ctx, authService); err != nil {
+			log.Printf("warning: failed to create default user: %v", err)
+		}
+	}
+
 	a.hub = ws.NewHub()
 	go a.hub.Run()
 
@@ -91,4 +98,24 @@ func (a *App) Shutdown(ctx context.Context) {
 	if a.storage != nil {
 		a.storage.Close()
 	}
+}
+
+func (a *App) ensureDefaultUser(ctx context.Context, authService *auth.Service) error {
+	if a.storage == nil {
+		return nil
+	}
+
+	// Try to register the default user
+	user, err := authService.Register(ctx, a.config.DefaultUser, a.config.DefaultPassword)
+	if err != nil {
+		// If user already exists, that's fine
+		if err.Error() == "username already taken" {
+			log.Printf("default user '%s' already exists", a.config.DefaultUser)
+			return nil
+		}
+		return err
+	}
+
+	log.Printf("default user '%s' created with ID: %s", user.Username, user.ID)
+	return nil
 }

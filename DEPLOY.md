@@ -188,14 +188,19 @@ terraform apply -replace="module.compute.yandex_compute_instance.main"
 
 При push в `main`:
 
-1. **Build job**:
-   - Собирает Docker образ
+1. **Changes job**:
+   - Анализирует изменённые файлы
+   - Определяет, нужен ли build и deploy
+   
+2. **Build job** (зависит от changes):
+   - Собирает Docker образ только если изменился код приложения
    - Пушит в `cellardooor/blank:<tag>` и `cellardooor/blank:latest`
 
-2. **Deploy job**:
+3. **Deploy job** (зависит от build и changes):
    - Инициализирует Terraform с S3 backend
    - Передаёт переменные через `TF_VAR_*` из GitHub Secrets/Variables
    - **Пересоздаёт VM** (Immutable Infrastructure approach) - новая VM с чистым состоянием
+   - Используется `create_before_destroy` для минимизации downtime
    - Запускает `terraform plan` и `terraform apply -replace`
 
 ### Ручной запуск деплоя

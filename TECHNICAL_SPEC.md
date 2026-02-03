@@ -471,7 +471,13 @@ volumes:
    - Public IP via NAT
    - cloud-init user-data for provisioning
 
-### 10.2 Cloud-init Stages
+### 10.2 VM Lifecycle Strategy
+- **Create Before Destroy**: Новая VM создаётся перед удалением старой
+- **Zero Downtime**: Пока старая VM работает, новая разворачивается и запускается
+- **Immutable Infrastructure**: Каждый деплой = чистая VM с актуальным образом
+- **Automatic Cleanup**: Старая VM удаляется после успешного создания новой
+
+### 10.3 Cloud-init Stages
 1. Update packages
 2. Install Docker & Docker Compose
 3. Create `/opt/messenger/` structure
@@ -494,22 +500,30 @@ volumes:
 ## 11. CI/CD Pipeline
 
 ### 11.1 GitHub Actions Workflow
-**Triggers**: Push to main, tags v*
+**Triggers**: Push в main, теги v*
 **Jobs**:
-1. **Build**:
-   - Checkout code
+1. **Changes**:
+   - Checkout с fetch-depth=0 для анализа истории
+   - Анализ изменённых файлов с помощью git diff
+   - Определение необходимости build (код приложения) и deploy (код + инфраструктура)
+
+2. **Build**:
+   - Needs: changes
+   - Условие: `build == 'true'`
    - Setup Docker Buildx
    - Login to Docker Hub
-   - Build and push image with tags: version, latest, sha
+   - Build и push образа с тегами: semver, latest, sha
+   - Если build не нужен, job запускается но пропускает сборку
 
-2. **Deploy**:
-   - Needs: build
+3. **Deploy**:
+   - Needs: [changes, build]
+   - Условие: `deploy == 'true'`
    - Checkout code
-   - Setup Terraform
-   - Configure YC Terraform mirror
-   - Terraform init with S3 backend
+   - Setup Terraform с YC mirror
+   - Terraform init с S3 backend
    - Terraform plan
-   - Terraform apply -replace="module.compute..." (immutable)
+   - Terraform apply -replace="module.compute..." (immutable infrastructure)
+   - Create before destroy lifecycle для минимизации downtime
    - Output public IP
 
 ### 11.2 Required Secrets

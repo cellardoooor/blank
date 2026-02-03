@@ -101,6 +101,8 @@ runcmd:
   - |
     JWT_SECRET=$(echo '${jwt_secret_b64}' | base64 -d)
     DB_PASSWORD=$(echo '${db_password_b64}' | base64 -d)
+    DEFAULT_USER=$(echo '${default_user_b64}' | base64 -d)
+    DEFAULT_PASSWORD=$(echo '${default_password_b64}' | base64 -d)
     echo "HTTP_ADDR=:8080" > /opt/messenger/.env
     echo "JWT_SECRET=$JWT_SECRET" >> /opt/messenger/.env
     echo "JWT_DURATION=${jwt_duration}" >> /opt/messenger/.env
@@ -111,6 +113,8 @@ runcmd:
     echo "DB_NAME=messenger" >> /opt/messenger/.env
     echo "DB_SSLMODE=disable" >> /opt/messenger/.env
     echo "POSTGRES_PASSWORD=$DB_PASSWORD" >> /opt/messenger/.env
+    echo "DEFAULT_USER=$DEFAULT_USER" >> /opt/messenger/.env
+    echo "DEFAULT_PASSWORD=$DEFAULT_PASSWORD" >> /opt/messenger/.env
   - chmod 600 /opt/messenger/.env
   - chmod +x /opt/messenger/start.sh
   - echo "@reboot root /opt/messenger/start.sh >> /var/log/messenger-startup.log 2>&1" > /etc/cron.d/messenger
