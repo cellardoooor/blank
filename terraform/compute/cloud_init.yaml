@@ -9,60 +9,115 @@ packages:
   - gnupg
   - lsb-release
   - git
+  - postgresql-client
 
 write_files:
-  - path: /opt/messenger/env.sh
+  - path: /opt/messenger/.env
     permissions: '0600'
     owner: root:root
     content: |
-      HTTP_ADDR="${http_addr}"
-      JWT_SECRET="${jwt_secret}"
-      JWT_DURATION="${jwt_duration}"
-      DB_HOST="${db_host}"
-      DB_PORT="${db_port}"
-      DB_USER="${db_user}"
-      DB_PASSWORD="${db_password}"
-      DB_NAME="${db_name}"
-      DB_SSLMODE="${db_sslmode}"
+      HTTP_ADDR=:8080
+      JWT_SECRET=${jwt_secret}
+      JWT_DURATION=${jwt_duration}
+      DB_HOST=postgres
+      DB_PORT=5432
+      DB_USER=messenger
+      DB_PASSWORD=${db_password}
+      DB_NAME=messenger
+      DB_SSLMODE=disable
 
-  - path: /opt/messenger/start.sh
-    permissions: '0755'
+  - path: /opt/messenger/docker-compose.yml
+    permissions: '0644'
     owner: root:root
     content: |
-      #!/bin/bash
-      source /opt/messenger/env.sh
-      /usr/bin/docker run \
-        --name messenger-app \
-        --rm \
-        -p ${app_port}:${app_port} \
-        -e HTTP_ADDR="$HTTP_ADDR" \
-        -e JWT_SECRET="$JWT_SECRET" \
-        -e JWT_DURATION="$JWT_DURATION" \
-        -e DB_HOST="$DB_HOST" \
-        -e DB_PORT="$DB_PORT" \
-        -e DB_USER="$DB_USER" \
-        -e DB_PASSWORD="$DB_PASSWORD" \
-        -e DB_NAME="$DB_NAME" \
-        -e DB_SSLMODE="$DB_SSLMODE" \
-        ${docker_image}
+      version: '3.8'
 
-  - path: /etc/systemd/system/messenger-app.service
+      services:
+        postgres:
+          image: postgres:15-alpine
+          container_name: messenger-postgres
+          environment:
+            POSTGRES_USER: messenger
+            POSTGRES_PASSWORD: ${db_password}
+            POSTGRES_DB: messenger
+          volumes:
+            - postgres_data:/var/lib/postgresql/data
+            - /opt/messenger/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+          ports:
+            - "127.0.0.1:5432:5432"
+          healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U messenger"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+          networks:
+            - messenger-network
+
+        app:
+          image: ${docker_image}
+          container_name: messenger-app
+          env_file:
+            - .env
+          ports:
+            - "8080:8080"
+          depends_on:
+            postgres:
+              condition: service_healthy
+          networks:
+            - messenger-network
+          restart: unless-stopped
+
+      volumes:
+        postgres_data:
+
+      networks:
+        messenger-network:
+          driver: bridge
+
+  - path: /opt/messenger/init.sql
+    permissions: '0644'
+    owner: root:root
+    content: |
+      CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+      CREATE TABLE IF NOT EXISTS users (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          username VARCHAR(50) UNIQUE NOT NULL,
+          password_hash VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE INDEX idx_users_username ON users(username);
+
+      CREATE TABLE IF NOT EXISTS messages (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          receiver_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          payload BYTEA NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE INDEX idx_messages_sender ON messages(sender_id);
+      CREATE INDEX idx_messages_receiver ON messages(receiver_id);
+      CREATE INDEX idx_messages_created ON messages(created_at DESC);
+
+  - path: /etc/systemd/system/messenger.service
     permissions: '0644'
     content: |
       [Unit]
-      Description=Messenger Application Container
+      Description=Messenger Application with PostgreSQL
       Requires=docker.service
       After=docker.service
 
       [Service]
-      Type=simple
-      Restart=always
-      RestartSec=5
-      ExecStartPre=-/usr/bin/docker rm -f messenger-app
-      ExecStartPre=/usr/bin/docker pull ${docker_image}
-      ExecStart=/opt/messenger/start.sh
-      ExecStop=/usr/bin/docker stop -t 30 messenger-app
-      ExecStopPost=-/usr/bin/docker rm -f messenger-app
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/opt/messenger
+      ExecStartPre=-/usr/bin/docker compose down
+      ExecStartPre=/usr/bin/docker compose pull app
+      ExecStart=/usr/bin/docker compose up -d
+      ExecStop=/usr/bin/docker compose down
+      ExecReload=/usr/bin/docker compose restart
 
       [Install]
       WantedBy=multi-user.target
@@ -79,7 +134,16 @@ runcmd:
   - systemctl enable docker
   - usermod -aG docker ubuntu
 
+  # Create directory and set permissions
+  - mkdir -p /opt/messenger
+  - chown -R root:root /opt/messenger
+  - chmod 600 /opt/messenger/.env
+
   # Reload and start service
   - systemctl daemon-reload
-  - systemctl enable messenger-app
-  - systemctl start messenger-app
+  - systemctl enable messenger
+  - systemctl start messenger
+
+  # Wait for services to be ready
+  - sleep 30
+  - docker compose -f /opt/messenger/docker-compose.yml logs
