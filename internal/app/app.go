@@ -64,7 +64,7 @@ func (a *App) Init(ctx context.Context) error {
 	a.hub = ws.NewHub()
 	go a.hub.Run()
 
-	httpHandler := httphandlers.NewHandler(authService, userService, messageService)
+	httpHandler := httphandlers.NewHandler(authService, userService, messageService, a.config.CORSAllowed)
 	router := httpHandler.Router()
 
 	// Add health check endpoint

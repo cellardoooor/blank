@@ -20,7 +20,33 @@ let allUsers = [];
 let conversationPartners = new Set();
 let messagesMap = new Map(); // userId -> messages array
 
-const API_URL = '';
+const API_URL = '/api';
+
+async function apiRequest(endpoint, options = {}) {
+    const defaultOptions = {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            ...options.headers
+        },
+        signal: AbortSignal.timeout(10000)
+    };
+
+    try {
+        const res = await fetch(`${API_URL}${endpoint}`, { ...defaultOptions, ...options });
+
+        if (res.status === 401) {
+            logout();
+            throw new Error('Unauthorized');
+        }
+
+        return res;
+    } catch (e) {
+        if (e.name === 'AbortError') {
+            throw new Error('Request timeout');
+        }
+        throw e;
+    }
+}
 
 // Initialize application
 if (token) {
@@ -50,22 +76,23 @@ async function login() {
     }
 
     try {
-        const res = await fetch(`${API_URL}/api/auth/login`, {
+        const res = await fetch(`${API_URL}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
         });
 
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Login failed');
+        if (!res.ok) {
+            const errorData = await res.json();
+            errorEl.textContent = errorData.error || 'Login failed';
+            return;
+        }
 
+        const data = await res.json();
         token = data.token;
         localStorage.setItem('token', token);
         
-        // Get current user info
-        const meRes = await fetch(`${API_URL}/api/me`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const meRes = await apiRequest('/me');
         if (meRes.ok) {
             const me = await meRes.json();
             userId = me.id;
@@ -74,7 +101,7 @@ async function login() {
         
         await initApp();
     } catch (e) {
-        errorEl.textContent = e.message;
+        errorEl.textContent = 'Network error: ' + e.message;
     }
 }
 
@@ -89,22 +116,23 @@ async function register() {
     }
 
     try {
-        const res = await fetch(`${API_URL}/api/auth/register`, {
+        const res = await fetch(`${API_URL}/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
         });
 
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Registration failed');
+        if (!res.ok) {
+            const errorData = await res.json();
+            errorEl.textContent = errorData.error || 'Registration failed';
+            return;
+        }
 
+        const data = await res.json();
         token = data.token;
         localStorage.setItem('token', token);
         
-        // Get current user info
-        const meRes = await fetch(`${API_URL}/api/me`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const meRes = await apiRequest('/me');
         if (meRes.ok) {
             const me = await meRes.json();
             userId = me.id;
@@ -113,7 +141,7 @@ async function register() {
         
         await initApp();
     } catch (e) {
-        errorEl.textContent = e.message;
+        errorEl.textContent = 'Network error: ' + e.message;
     }
 }
 
@@ -208,17 +236,10 @@ function handleIncomingMessage(msg) {
 
 async function loadChats() {
     try {
-        // Use the new /api/chats endpoint which provides all needed data
-        const res = await fetch(`${API_URL}/api/chats`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const res = await apiRequest('/chats');
         
         if (!res.ok) {
-            if (res.status === 401) {
-                logout();
-                return;
-            }
-            throw new Error('Failed to load chats');
+            throw new Error('Failed to load chats: ' + res.statusText);
         }
         
         const chatList = await res.json();
@@ -229,17 +250,11 @@ async function loadChats() {
         chatList.forEach(chat => {
             chats.set(chat.user_id, {
                 userId: chat.user_id,
-                username: chat.username,
+                username: chat.username || chat.user_id,
                 lastMessage: chat.last_message,
                 lastMessageTime: new Date(chat.last_message_time)
             });
             conversationPartners.add(chat.user_id);
-            
-            // Also update current user if we haven't identified ourselves yet
-            if (!userId) {
-                // We need to infer this from the fact that we're seeing this chat
-                // This is a limitation - ideally server should provide /api/me endpoint
-            }
         });
         
         renderChatList();
@@ -279,9 +294,7 @@ function updateChatFromMessage(partnerId, msg) {
 
 async function fetchUserInfo(userId) {
     try {
-        const res = await fetch(`${API_URL}/api/users/${userId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const res = await apiRequest(`/users/${userId}`);
         if (res.ok) {
             return await res.json();
         }
@@ -342,33 +355,6 @@ function renderChatList() {
         container.appendChild(div);
     });
 }
-    
-    // Hide button when there are chats
-    btnContainer.style.display = 'none';
-    
-    sortedChats.forEach(chat => {
-        const div = document.createElement('div');
-        div.className = 'chat-item' + (currentChat === chat.userId ? ' active' : '');
-        div.onclick = () => selectChat(chat.userId);
-        
-        const initial = chat.username.charAt(0).toUpperCase();
-        const timeStr = formatChatListTime(chat.lastMessageTime);
-        const preview = chat.lastMessage ? truncateText(chat.lastMessage, 30) : 'No messages yet';
-        
-        div.innerHTML = `
-            <div class="chat-avatar">${initial}</div>
-            <div class="chat-content">
-                <div class="chat-header-row">
-                    <div class="chat-username">${escapeHtml(chat.username)}</div>
-                    <div class="chat-time">${timeStr}</div>
-                </div>
-                <div class="chat-preview">${escapeHtml(preview)}</div>
-            </div>
-        `;
-        
-        container.appendChild(div);
-    });
-}
 
 function selectChat(chatUserId) {
     currentChat = chatUserId;
@@ -400,21 +386,18 @@ async function loadMessages(chatUserId) {
     container.innerHTML = '';
     
     try {
-        const res = await fetch(`${API_URL}/api/messages/${chatUserId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const res = await apiRequest(`/messages/${chatUserId}`);
         
-        if (!res.ok) throw new Error('Failed to load messages');
+        if (!res.ok) {
+            throw new Error('Failed to load messages: ' + res.statusText);
+        }
         
         const messages = await res.json();
         
-        // Store in map
         messagesMap.set(chatUserId, messages);
         
-        // Display messages (oldest first)
         messages.reverse().forEach(msg => displayMessage(msg));
         
-        // Scroll to bottom
         scrollToBottom();
         
     } catch (e) {
@@ -504,14 +487,14 @@ async function createChatByUsername() {
     }
     
     try {
-        const res = await fetch(`${API_URL}/api/users?username=${encodeURIComponent(username)}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const res = await apiRequest(`/users?username=${encodeURIComponent(username)}`);
         if (res.status === 404) {
             errorEl.textContent = 'User not found';
             return;
         }
-        if (!res.ok) throw new Error('Failed to find user');
+        if (!res.ok) {
+            throw new Error('Failed to find user: ' + res.statusText);
+        }
         
         const user = await res.json();
         startNewChat(user.id, user.username);

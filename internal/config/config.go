@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -14,6 +15,7 @@ type Config struct {
 	DB              DatabaseConfig
 	DefaultUser     string
 	DefaultPassword string
+	CORSAllowed     []string
 }
 
 type DatabaseConfig struct {
@@ -28,12 +30,19 @@ type DatabaseConfig struct {
 func Load() *Config {
 	godotenv.Load()
 
+	corsAllowed := getEnv("CORS_ALLOWED_ORIGINS", "")
+	allowedOrigins := []string{"*"}
+	if corsAllowed != "" {
+		allowedOrigins = splitEnv(corsAllowed)
+	}
+
 	return &Config{
 		HTTPAddr:        getEnv("HTTP_ADDR", ":8080"),
 		JWTSecret:       []byte(getEnv("JWT_SECRET", "default-secret-change-in-production")),
 		JWTDuration:     parseDuration(getEnv("JWT_DURATION", "24h")),
 		DefaultUser:     getEnv("DEFAULT_USER", ""),
 		DefaultPassword: getEnv("DEFAULT_PASSWORD", ""),
+		CORSAllowed:     allowedOrigins,
 		DB: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     getEnv("DB_PORT", "5432"),
@@ -54,6 +63,20 @@ func getEnv(key, defaultVal string) string {
 		return v
 	}
 	return defaultVal
+}
+
+func splitEnv(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	result := []string{}
+	for _, part := range strings.Split(s, ",") {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 func parseDuration(s string) time.Duration {

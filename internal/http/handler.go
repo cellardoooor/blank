@@ -3,9 +3,11 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/rs/cors"
 	"messenger/internal/auth"
 	"messenger/internal/service"
 )
@@ -14,13 +16,15 @@ type Handler struct {
 	authService    *auth.Service
 	userService    *service.UserService
 	messageService *service.MessageService
+	corsAllowed    []string
 }
 
-func NewHandler(authSvc *auth.Service, userSvc *service.UserService, msgSvc *service.MessageService) *Handler {
+func NewHandler(authSvc *auth.Service, userSvc *service.UserService, msgSvc *service.MessageService, corsAllowed []string) *Handler {
 	return &Handler{
 		authService:    authSvc,
 		userService:    userSvc,
 		messageService: msgSvc,
+		corsAllowed:    corsAllowed,
 	}
 }
 
@@ -33,6 +37,7 @@ func (h *Handler) Router() *mux.Router {
 
 	api := r.PathPrefix("/api").Subrouter()
 	api.Use(auth.Middleware(h.authService))
+	api.Use(corsMiddleware())
 	api.HandleFunc("/me", h.getCurrentUser).Methods("GET")
 	api.HandleFunc("/users", h.listUsers).Methods("GET")
 	api.HandleFunc("/users/{id}", h.getUser).Methods("GET")
@@ -44,6 +49,31 @@ func (h *Handler) Router() *mux.Router {
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/")))
 
 	return r
+}
+
+func corsMiddleware() mux.MiddlewareFunc {
+	c := cors.New(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"*"},
+		AllowCredentials: true,
+		MaxAge:           86400,
+	})
+	return c.Handler
+}
+
+func respondJSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(data)
+}
+
+func respondError(w http.ResponseWriter, status int, message string) {
+	respondJSON(w, status, map[string]string{"error": message})
 }
 
 func (h *Handler) healthCheck(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +168,10 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusNotFound, "user not found")
 			return
 		}
-		respondJSON(w, http.StatusOK, user)
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"id":       user.ID,
+			"username": user.Username,
+		})
 		return
 	}
 
@@ -169,6 +202,14 @@ func (h *Handler) getChats(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to get chats")
 		return
+	}
+
+	// Add user info to each chat
+	for i := range chats {
+		user, err := h.userService.GetByID(r.Context(), uuid.MustParse(chats[i].UserID))
+		if err == nil && user != nil {
+			chats[i].Username = user.Username
+		}
 	}
 
 	respondJSON(w, http.StatusOK, chats)
@@ -243,15 +284,17 @@ func (h *Handler) getMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, messages)
-}
+	// Convert messages to API format
+	apiMessages := make([]interface{}, len(messages))
+	for i, msg := range messages {
+		apiMessages[i] = map[string]interface{}{
+			"id":          msg.ID,
+			"sender_id":   msg.SenderID,
+			"receiver_id": msg.ReceiverID,
+			"payload":     msg.Payload,
+			"created_at":  msg.CreatedAt.Format(time.RFC3339),
+		}
+	}
 
-func respondJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
-}
-
-func respondError(w http.ResponseWriter, status int, message string) {
-	respondJSON(w, status, map[string]string{"error": message})
+	respondJSON(w, http.StatusOK, apiMessages)
 }
