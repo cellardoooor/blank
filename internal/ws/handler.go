@@ -109,7 +109,7 @@ func (c *Client) readPump() {
 
 		msg.ID = uuid.New()
 		msg.SenderID = c.userID
-		msg.Timestamp = time.Now().Unix()
+		msg.CreatedAt = time.Now()
 
 		// Save message to database
 		if c.messageService != nil {
@@ -140,9 +140,6 @@ func (c *Client) writePump() {
 				return
 			}
 
-			// Convert timestamp (Unix seconds) to ISO 8601 format
-			createdAt := time.Unix(msg.Timestamp, 0).Format(time.RFC3339)
-
 			// Convert to API message format
 			apiMsg := struct {
 				ID         uuid.UUID `json:"id"`
@@ -155,7 +152,7 @@ func (c *Client) writePump() {
 				SenderID:   msg.SenderID,
 				ReceiverID: msg.ReceiverID,
 				Payload:    msg.Payload,
-				CreatedAt:  createdAt,
+				CreatedAt:  msg.CreatedAt.Format(time.RFC3339),
 			}
 
 			data, err := json.Marshal(apiMsg)

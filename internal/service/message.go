@@ -40,6 +40,7 @@ func (s *MessageService) Send(ctx context.Context, senderID, receiverID uuid.UUI
 		SenderID:   senderID,
 		ReceiverID: receiverID,
 		Payload:    payload,
+		CreatedAt:  time.Now(),
 	}
 
 	if err := s.repo.Create(ctx, msg); err != nil {

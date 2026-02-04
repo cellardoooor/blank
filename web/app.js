@@ -424,29 +424,8 @@ function displayMessage(msg) {
     scrollToBottom();
 }
 
-// Helper functions for base64 encoding/decoding
-function encodePayload(text) {
-    // Convert text to base64 (UTF-8 safe)
-    const bytes = new TextEncoder().encode(text);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
-}
-
 function decodePayload(payload) {
-    // Handle both base64 string (from server) and array format
-    if (typeof payload === 'string') {
-        // Base64 string - decode it
-        const binary = atob(payload);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-            bytes[i] = binary.charCodeAt(i);
-        }
-        return new TextDecoder().decode(bytes);
-    } else if (Array.isArray(payload)) {
-        // Legacy array format (for backward compatibility)
+    if (Array.isArray(payload)) {
         return new TextDecoder().decode(new Uint8Array(payload));
     }
     return String(payload);
@@ -458,7 +437,7 @@ function sendMessage() {
     
     if (!text || !currentChat) return;
     
-    const payload = encodePayload(text);
+    const payload = Array.from(new TextEncoder().encode(text));
     const msg = {
         receiver_id: currentChat,
         payload: payload

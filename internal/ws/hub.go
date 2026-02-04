@@ -20,7 +20,7 @@ type Message struct {
 	SenderID   uuid.UUID `json:"sender_id"`
 	ReceiverID uuid.UUID `json:"receiver_id"`
 	Payload    []byte    `json:"payload"`
-	Timestamp  int64     `json:"timestamp"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 func NewHub() *Hub {
