@@ -425,9 +425,7 @@ function displayMessage(msg) {
 }
 
 function decodePayload(payload) {
-    if (Array.isArray(payload)) {
-        return new TextDecoder().decode(new Uint8Array(payload));
-    }
+    // Payload is now a string directly from server
     return String(payload);
 }
 
@@ -437,10 +435,10 @@ function sendMessage() {
     
     if (!text || !currentChat) return;
     
-    const payload = Array.from(new TextEncoder().encode(text));
+    // Send payload as string directly
     const msg = {
         receiver_id: currentChat,
-        payload: payload
+        payload: text
     };
     
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -454,12 +452,12 @@ function sendMessage() {
     input.value = '';
     input.style.height = 'auto';
     
-    // Optimistically add to UI
+    // Optimistically add to UI (will be replaced by server response)
     const optimisticMsg = {
         id: 'temp-' + Date.now(),
         sender_id: userId,
         receiver_id: currentChat,
-        payload: payload,
+        payload: text,
         created_at: new Date().toISOString()
     };
     

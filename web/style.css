@@ -1,3 +1,12 @@
+/* Font Face */
+@font-face {
+    font-family: 'Chicago';
+    src: url('/fonts/Chicago Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
 /* Reset and Base Styles */
 * {
     margin: 0;
@@ -6,7 +15,7 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: 'Chicago', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     background: #ffffff;
     color: #000000;
     height: 100vh;
@@ -414,6 +423,7 @@ body {
     min-height: 44px;
     max-height: 120px;
     font-family: inherit;
+    overflow: hidden;
 }
 
 #message-input:focus {
@@ -545,11 +555,15 @@ body {
     border-top: 1px solid #e0e0e0;
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
 }
 
 .modal-footer button {
     width: auto;
     padding: 8px 20px;
+    margin-bottom: 0;
+    height: 36px;
 }
 
 #empty-chat-btn-container {

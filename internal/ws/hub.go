@@ -19,7 +19,7 @@ type Message struct {
 	ID         uuid.UUID `json:"id"`
 	SenderID   uuid.UUID `json:"sender_id"`
 	ReceiverID uuid.UUID `json:"receiver_id"`
-	Payload    []byte    `json:"payload"`
+	Payload    string    `json:"payload"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 
@@ -50,16 +50,30 @@ func (h *Hub) Run() {
 
 		case msg := <-h.broadcast:
 			h.mu.RLock()
-			client, ok := h.clients[msg.ReceiverID]
+			// Send to receiver
+			receiver, receiverOK := h.clients[msg.ReceiverID]
+			// Send to sender (for confirmation with real ID and timestamp)
+			sender, senderOK := h.clients[msg.SenderID]
 			h.mu.RUnlock()
 
-			if ok {
+			if receiverOK {
 				select {
-				case client.send <- msg:
+				case receiver.send <- msg:
 				default:
 					h.mu.Lock()
-					close(client.send)
-					delete(h.clients, client.userID)
+					close(receiver.send)
+					delete(h.clients, receiver.userID)
+					h.mu.Unlock()
+				}
+			}
+
+			if senderOK && msg.SenderID != msg.ReceiverID {
+				select {
+				case sender.send <- msg:
+				default:
+					h.mu.Lock()
+					close(sender.send)
+					delete(h.clients, sender.userID)
 					h.mu.Unlock()
 				}
 			}

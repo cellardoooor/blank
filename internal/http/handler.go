@@ -271,7 +271,14 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusCreated, msg)
+	// Return message with string payload
+	respondJSON(w, http.StatusCreated, map[string]interface{}{
+		"id":          msg.ID,
+		"sender_id":   msg.SenderID,
+		"receiver_id": msg.ReceiverID,
+		"payload":     string(msg.Payload), // Convert []byte to string
+		"created_at":  msg.CreatedAt.Format(time.RFC3339),
+	})
 }
 
 func (h *Handler) getMessages(w http.ResponseWriter, r *http.Request) {
@@ -293,14 +300,14 @@ func (h *Handler) getMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert messages to API format
+	// Convert messages to API format with string payload
 	apiMessages := make([]interface{}, len(messages))
 	for i, msg := range messages {
 		apiMessages[i] = map[string]interface{}{
 			"id":          msg.ID,
 			"sender_id":   msg.SenderID,
 			"receiver_id": msg.ReceiverID,
-			"payload":     msg.Payload,
+			"payload":     string(msg.Payload), // Convert []byte to string
 			"created_at":  msg.CreatedAt.Format(time.RFC3339),
 		}
 	}

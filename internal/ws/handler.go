@@ -98,12 +98,14 @@ func (c *Client) readPump() {
 		_, data, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("websocket error: %v", err)
 			}
 			break
 		}
 
 		var msg Message
 		if err := json.Unmarshal(data, &msg); err != nil {
+			log.Printf("failed to unmarshal message: %v", err)
 			continue
 		}
 
@@ -111,10 +113,10 @@ func (c *Client) readPump() {
 		msg.SenderID = c.userID
 		msg.CreatedAt = time.Now()
 
-		// Save message to database
+		// Save message to database (convert string to []byte)
 		if c.messageService != nil {
 			ctx := context.Background()
-			_, err := c.messageService.Send(ctx, c.userID, msg.ReceiverID, msg.Payload)
+			_, err := c.messageService.Send(ctx, c.userID, msg.ReceiverID, []byte(msg.Payload))
 			if err != nil {
 				log.Printf("failed to save message: %v", err)
 			}
