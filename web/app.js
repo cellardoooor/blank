@@ -265,7 +265,7 @@ async function loadChats() {
 }
 
 function updateChatFromMessage(partnerId, msg) {
-    const text = new TextDecoder().decode(new Uint8Array(msg.payload));
+    const text = decodePayload(msg.payload);
     const chat = chats.get(partnerId);
     
     if (chat) {
@@ -412,7 +412,7 @@ function displayMessage(msg) {
     const div = document.createElement('div');
     div.className = `message ${isOutgoing ? 'outgoing' : 'incoming'}`;
     
-    const text = new TextDecoder().decode(new Uint8Array(msg.payload));
+    const text = decodePayload(msg.payload);
     const time = formatMessageTime(new Date(msg.created_at));
     
     div.innerHTML = `
@@ -424,16 +424,44 @@ function displayMessage(msg) {
     scrollToBottom();
 }
 
+// Helper functions for base64 encoding/decoding
+function encodePayload(text) {
+    // Convert text to base64 (UTF-8 safe)
+    const bytes = new TextEncoder().encode(text);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
+function decodePayload(payload) {
+    // Handle both base64 string (from server) and array format
+    if (typeof payload === 'string') {
+        // Base64 string - decode it
+        const binary = atob(payload);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return new TextDecoder().decode(bytes);
+    } else if (Array.isArray(payload)) {
+        // Legacy array format (for backward compatibility)
+        return new TextDecoder().decode(new Uint8Array(payload));
+    }
+    return String(payload);
+}
+
 function sendMessage() {
     const input = document.getElementById('message-input');
     const text = input.value.trim();
     
     if (!text || !currentChat) return;
     
-    const payload = new TextEncoder().encode(text);
+    const payload = encodePayload(text);
     const msg = {
         receiver_id: currentChat,
-        payload: Array.from(payload)
+        payload: payload
     };
     
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -452,7 +480,7 @@ function sendMessage() {
         id: 'temp-' + Date.now(),
         sender_id: userId,
         receiver_id: currentChat,
-        payload: Array.from(payload),
+        payload: payload,
         created_at: new Date().toISOString()
     };
     
