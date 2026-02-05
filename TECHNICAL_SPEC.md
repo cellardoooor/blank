@@ -520,7 +520,8 @@ host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<m
 ### 8.6 Chat Window (Right Panel)
 - **Header**: Avatar + Username + Status
 - **Messages Area**: Scrollable container with bubbles
-  - **All messages**: White background (#fff), black text, rounded corners
+  - **Incoming (other)**: Left-aligned, white background (#fff), black text, rounded corners
+  - **Outgoing (me)**: Right-aligned, white background (#fff), black text, rounded corners
   - **Optimistic messages**: Gray text (#999999) while sending, replaced by black text after confirmation
   - **Message confirmation**: Temporary gray message replaced by confirmed message from server
   - **Timestamp**: Small gray text below message (local time)

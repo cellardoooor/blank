@@ -419,7 +419,7 @@ function displayMessage(msg, isOptimistic = false) {
     const isOutgoing = msg.sender_id === userId;
     
     const div = document.createElement('div');
-    div.className = `message outgoing ${isOptimistic ? 'optimistic' : ''}`;
+    div.className = `message ${isOutgoing ? 'outgoing' : 'incoming'} ${isOptimistic ? 'optimistic' : ''}`;
     div.dataset.messageId = msg.id;
     
     const text = decodePayload(msg.payload);

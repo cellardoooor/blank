@@ -375,9 +375,9 @@ body {
 
 .message.incoming {
     align-self: flex-start;
-    background: #f0f0f0;
+    background: #ffffff;
     color: #000000;
-    border: 1px solid #e0e0e0;
+    border: 1px solid #000000;
     border-bottom-left-radius: 4px;
 }
 
