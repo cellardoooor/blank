@@ -26,8 +26,13 @@ variable "environment" {
   default     = "dev"
 }
 
+variable "domain" {
+  description = "Domain name for the application (e.g., messenger.example.com)"
+  type        = string
+}
+
 variable "docker_image" {
-  description = "Docker image URL in Yandex Container Registry (e.g., cr.yandex/crpXXXXXX/messenger:latest)"
+  description = "Docker image URL (e.g., cellardooor/blank:latest)"
   type        = string
 }
 
@@ -49,34 +54,16 @@ variable "jwt_secret" {
   sensitive   = true
 }
 
-variable "db_password" {
-  description = "Database password"
-  type        = string
-  sensitive   = true
-}
-
-variable "http_addr" {
-  description = "Server bind address"
-  type        = string
-  default     = ":8080"
-}
-
 variable "jwt_duration" {
   description = "Token lifetime"
   type        = string
   default     = "24h"
 }
 
-variable "db_host" {
-  description = "Database host"
+variable "db_password" {
+  description = "Database password"
   type        = string
-  default     = "localhost"
-}
-
-variable "db_port" {
-  description = "Database port"
-  type        = string
-  default     = "5432"
+  sensitive   = true
 }
 
 variable "db_user" {
@@ -91,8 +78,39 @@ variable "db_name" {
   default     = "messenger"
 }
 
-variable "db_sslmode" {
-  description = "SSL mode"
+variable "default_user" {
+  description = "Default user for messenger login"
   type        = string
-  default     = "disable"
+  default     = ""
+}
+
+variable "default_password" {
+  description = "Default password for messenger login"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "min_instances" {
+  description = "Minimum number of instances"
+  type        = number
+  default     = 2
+}
+
+variable "max_instances" {
+  description = "Maximum number of instances"
+  type        = number
+  default     = 4
+}
+
+variable "service_account_id" {
+  description = "Service account ID for instance group"
+  type        = string
+  default     = null
+}
+
+variable "certificate_id" {
+  description = "Certificate Manager certificate ID (if not using Let's Encrypt)"
+  type        = string
+  default     = null
 }

@@ -152,13 +152,14 @@ jobs:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
           TF_VAR_http_addr: ${{ vars.HTTP_ADDR }}
           TF_VAR_jwt_duration: ${{ vars.JWT_DURATION }}
-          TF_VAR_db_host: ${{ vars.DB_HOST }}
-          TF_VAR_db_port: ${{ vars.DB_PORT }}
           TF_VAR_db_user: ${{ vars.DB_USER }}
           TF_VAR_db_name: ${{ vars.DB_NAME }}
-          TF_VAR_db_sslmode: ${{ vars.DB_SSLMODE }}
+          TF_VAR_domain: ${{ vars.DOMAIN }}
           TF_VAR_default_user: ${{ secrets.DEFAULT_USER }}
           TF_VAR_default_password: ${{ secrets.DEFAULT_PASSWORD }}
+          TF_VAR_min_instances: ${{ vars.MIN_INSTANCES }}
+          TF_VAR_max_instances: ${{ vars.MAX_INSTANCES }}
+          TF_VAR_service_account_id: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
         run: |
           terraform plan -input=false
 
@@ -174,18 +175,21 @@ jobs:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
           TF_VAR_http_addr: ${{ vars.HTTP_ADDR }}
           TF_VAR_jwt_duration: ${{ vars.JWT_DURATION }}
-          TF_VAR_db_host: ${{ vars.DB_HOST }}
-          TF_VAR_db_port: ${{ vars.DB_PORT }}
           TF_VAR_db_user: ${{ vars.DB_USER }}
           TF_VAR_db_name: ${{ vars.DB_NAME }}
-          TF_VAR_db_sslmode: ${{ vars.DB_SSLMODE }}
+          TF_VAR_domain: ${{ vars.DOMAIN }}
           TF_VAR_default_user: ${{ secrets.DEFAULT_USER }}
           TF_VAR_default_password: ${{ secrets.DEFAULT_PASSWORD }}
+          TF_VAR_min_instances: ${{ vars.MIN_INSTANCES }}
+          TF_VAR_max_instances: ${{ vars.MAX_INSTANCES }}
+          TF_VAR_service_account_id: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
         run: |
-          # Force VM recreation for immutable infrastructure
-          terraform apply -auto-approve -input=false -replace="module.compute.yandex_compute_instance.main"
+          # Rolling update via Instance Group (zero-downtime)
+          terraform apply -auto-approve -input=false
 
-      - name: Output Public IP
+      - name: Output Deployment Info
         working-directory: ${{ env.TF_ROOT }}
         run: |
-          echo "Deployed to: http://$(terraform output -raw public_ip):8080"
+          echo "Deployed to: https://${{ vars.DOMAIN }}"
+          echo "ALB IP: $(terraform output -raw alb_ip_address)"
+          echo "Instance Count: $(terraform output -raw instance_count)"

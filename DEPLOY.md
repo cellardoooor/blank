@@ -1,15 +1,50 @@
-# Messenger - Image-based Deploy
+# Messenger - Scalable Deploy
 
-## Архитектура деплоя
+## Архитектура деплоя (Production-Ready)
 
-**Вариант A: Image-based deploy (cloud-init pull)**
+**Масштабируемая архитектура с Load Balancer**
 
-1. CI/CD собирает Docker образ и пушит в Docker Hub
-2. Terraform создаёт новую VM
-3. Cloud-init на VM:
-   - Устанавливает Docker
-   - Делает `docker pull cellardooor/blank:latest`
-   - Запускает контейнер через systemd
+```
+Internet
+    |
+    | HTTPS (443)
+    v
+┌─────────────────────────────────────┐
+│  Yandex Application Load Balancer   │
+│  • TLS Termination (Let's Encrypt)  │
+│  • HTTP → HTTPS redirect            │
+│  • Health checks: /api/health       │
+└──────────────┬──────────────────────┘
+               | HTTP (8080)
+               v
+┌─────────────────────────────────────┐
+│  Yandex Compute Instance Group      │
+│  • Минимум 2 VM (High Availability) │
+│  • Container-Optimized OS           │
+│  • Auto-healing                     │
+│  • Rolling updates (zero-downtime)  │
+└──────────────┬──────────────────────┘
+               | PostgreSQL (6432) + SSL
+               v
+┌─────────────────────────────────────┐
+│  Yandex Managed PostgreSQL          │
+│  • Версия 15                        │
+│  • Приватная подсеть                │
+│  • Только SSL-соединения            │
+│  • Автоматические бэкапы            │
+└─────────────────────────────────────┘
+```
+
+## Сетевая сегментация
+
+- **Public subnet (10.0.1.0/24)**: Application Load Balancer
+- **App subnet (10.0.2.0/24)**: Instance Group (VM с приложением)
+- **DB subnet (10.0.3.0/24)**: Managed PostgreSQL
+
+**Security Groups:**
+- PostgreSQL доступен только из App subnet (порт 6432)
+- Приложение доступно только из ALB (порт 8080)
+- ALB доступен из интернета (порты 80, 443)
 
 ## Подготовка
 
@@ -26,9 +61,10 @@
 | `YC_TOKEN` | OAuth токен для Terraform | См. раздел [Получение YC_TOKEN](#2-получение-yctoken) |
 | `YC_S3_ACCESS_KEY` | Access key для S3 backend | См. раздел [Создание S3 ключей](#3-создание-s3-ключей-для-terraform-state) |
 | `YC_S3_SECRET_KEY` | Secret key для S3 backend | См. раздел [Создание S3 ключей](#3-создание-s3-ключей-для-terraform-state) |
-| `TF_STATE_BUCKET` | Имя S3 bucket для state | Придумай любое уникальное имя (например: `terraform-state-messenger-xyz`) |
+| `TF_STATE_BUCKET` | Имя S3 bucket для state | Придумай уникальное имя |
 | `JWT_SECRET` | Секретный ключ для JWT токенов | `openssl rand -base64 32` |
-| `DB_PASSWORD` | Пароль для PostgreSQL | Придумай сильный пароль (минимум 12 символов) |
+| `DB_PASSWORD` | Пароль для Managed PostgreSQL | Придумай сильный пароль (минимум 12 символов) |
+| `YC_SERVICE_ACCOUNT_ID` | ID сервисного аккаунта для Instance Group | См. раздел [Сервисный аккаунт](#сервисный-аккаунт-для-instance-group) |
 
 #### GitHub Variables (открытые значения)
 
@@ -36,13 +72,13 @@
 |------------|-------------|-----------|----------------------|
 | `YC_CLOUD_ID` | ID облака Yandex | См. раздел [Получение Cloud/Folder ID](#получение-cloud_id-и-folder_id) | - |
 | `YC_FOLDER_ID` | ID каталога Yandex | См. раздел [Получение Cloud/Folder ID](#получение-cloud_id-и-folder_id) | - |
-| `HTTP_ADDR` | Порт приложения | Можно оставить по умолчанию | `:8080` |
-| `JWT_DURATION` | Время жизни токена | Можно оставить по умолчанию | `24h` |
-| `DB_HOST` | Хост базы данных | Можно оставить по умолчанию | `localhost` |
-| `DB_PORT` | Порт PostgreSQL | Можно оставить по умолчанию | `5432` |
-| `DB_USER` | Пользователь БД | Можно оставить по умолчанию | `messenger` |
-| `DB_NAME` | Имя базы данных | Можно оставить по умолчанию | `messenger` |
-| `DB_SSLMODE` | Режим SSL | Можно оставить по умолчанию | `disable` |
+| `DOMAIN` | Домен для HTTPS | Например: messenger.example.com | - |
+| `HTTP_ADDR` | Порт приложения | Можно оставить `:8080` | `:8080` |
+| `JWT_DURATION` | Время жизни токена | Можно оставить `24h` | `24h` |
+| `DB_USER` | Пользователь БД | Например: messenger | messenger |
+| `DB_NAME` | Имя базы данных | Например: messenger | messenger |
+| `MIN_INSTANCES` | Минимальное количество VM | Для отказоустойчивости | 2 |
+| `MAX_INSTANCES` | Максимальное количество VM | Для масштабирования | 4 |
 
 ### 2. Получение YC_TOKEN
 
@@ -78,14 +114,9 @@ yc config list | grep cloud-id
 
 # Получить Folder ID
 yc config list | grep folder-id
-
-# Или посмотреть все папки
-yc resource-manager folder list
 ```
 
 ### 3. Создание S3 ключей для Terraform State
-
-Сначала нужен `YC_FOLDER_ID` (получить выше).
 
 ```bash
 # 1. Создать Service Account для Terraform
@@ -94,65 +125,65 @@ yc iam service-account create --name terraform-sa
 # 2. Получить ID сервисного аккаунта
 SA_ID=$(yc iam service-account get terraform-sa --format=json | jq -r '.id')
 
-# 3. Назначить роль storage.editor (нужен YC_FOLDER_ID)
+# 3. Назначить роль storage.editor
 yc resource-manager folder add-access-binding <YC_FOLDER_ID> \
   --role storage.editor \
   --subject serviceAccount:$SA_ID
 
-# 4. Создать static access keys (сохрани вывод!)
+# 4. Создать static access keys
 yc iam access-key create --service-account-name terraform-sa
-# Вывод будет:
-# access_key:
-#   id: ...
-#   key_id: YCAJE... (это YC_S3_ACCESS_KEY)
-# secret: YCPVG... (это YC_S3_SECRET_KEY)
+# Сохрани: key_id (YC_S3_ACCESS_KEY) и secret (YC_S3_SECRET_KEY)
 
-# 5. Создать bucket для Terraform state (имя должно быть уникальным глобально!)
+# 5. Создать bucket для Terraform state
 yc storage bucket create --name <UNIQUE_BUCKET_NAME>
-# Например: terraform-state-messenger-$(date +%s)
 ```
 
-**Что сохранить в GitHub Secrets:**
-- `YC_S3_ACCESS_KEY` = key_id из вывода команды
-- `YC_S3_SECRET_KEY` = secret из вывода команды
-- `TF_STATE_BUCKET` = имя bucket'а которое придумал
+### Сервисный аккаунт для Instance Group
 
-### 4. Генерация секретов приложения
+Instance Group нуждается в сервисном аккаунте для управления VM:
 
-Для работы приложения нужны два секрета:
-
-**1. JWT_SECRET** - ключ для подписи JWT токенов:
 ```bash
-openssl rand -base64 32
+# 1. Создать Service Account для Instance Group
+yc iam service-account create --name ig-sa
+
+# 2. Получить ID
+SA_ID=$(yc iam service-account get ig-sa --format=json | jq -r '.id')
+
+# 3. Назначить роли
+yc resource-manager folder add-access-binding <YC_FOLDER_ID> \
+  --role compute.editor \
+  --subject serviceAccount:$SA_ID
+
+yc resource-manager folder add-access-binding <YC_FOLDER_ID> \
+  --role load-balancer.editor \
+  --subject serviceAccount:$SA_ID
+
+# 4. Сохранить ID в GitHub Secrets как YC_SERVICE_ACCOUNT_ID
+echo $SA_ID
 ```
-Сохрани результат в GitHub Secret `JWT_SECRET`.
 
-**2. DB_PASSWORD** - пароль для PostgreSQL:
-Придумай сильный пароль (минимум 12 символов, буквы, цифры, спецсимволы) и сохрани в GitHub Secret `DB_PASSWORD`.
+### 4. Настройка домена
 
-**Переменные по умолчанию** (можно не задавать, будут использованы значения из таблицы выше):
-- `HTTP_ADDR=:8080`
-- `JWT_DURATION=24h`
-- `DB_HOST=localhost`
-- `DB_PORT=5432`
-- `DB_USER=messenger`
-- `DB_NAME=messenger`
-- `DB_SSLMODE=disable`
+1. Зарегистрируй домен (например, messenger.example.com)
+2. В DNS настрой A-запись:
+   ```
+   messenger.example.com.  A  <ALB_IP>
+   ```
+3. ALB IP будет получен после первого деплоя
+4. Let's Encrypt автоматически выпустит сертификат
 
-## Локальная разработка (опционально)
-
-Если нужно запускать Terraform локально, а не через CI/CD:
+## Локальная разработка
 
 ```bash
 cd terraform/envs/dev
 cp terraform.tfvars.example terraform.tfvars
 
 # Заполни terraform.tfvars:
-# - yc_cloud_id, yc_folder_id (из раздела выше)
-# - yc_token (из раздела 2)
-# - docker_image (например: cellardooor/blank:latest)
-# - jwt_secret, db_password (из раздела 4)
-# - http_addr, jwt_duration, db_host, db_port, db_user, db_name, db_sslmode (опционально)
+# - yc_cloud_id, yc_folder_id
+# - yc_token
+# - domain
+# - docker_image
+# - jwt_secret, db_password
 ```
 
 **CI/CD не использует terraform.tfvars** — все значения берутся из GitHub Secrets/Variables.
@@ -177,11 +208,8 @@ terraform init \
 
 terraform plan
 
-# Для пересоздания VM (новый Docker образ + чистое состояние):
-terraform apply -replace="module.compute.yandex_compute_instance.main"
-
-# Или просто обновить без пересоздания:
-# terraform apply
+# Деплой (rolling update, не пересоздаёт инфраструктуру)
+terraform apply
 ```
 
 ## CI/CD Pipeline
@@ -192,28 +220,25 @@ terraform apply -replace="module.compute.yandex_compute_instance.main"
    - Анализирует изменённые файлы
    - Определяет, нужен ли build и deploy
    
-2. **Build job** (зависит от changes):
-   - Собирает Docker образ только если изменился код приложения
-   - Пушит в `cellardooor/blank:<tag>` и `cellardooor/blank:latest`
+2. **Build job**:
+   - Собирает Docker образ если изменился код
+   - Пушит в Docker Hub
 
-3. **Deploy job** (зависит от build и changes):
+3. **Deploy job**:
    - Инициализирует Terraform с S3 backend
-   - Передаёт переменные через `TF_VAR_*` из GitHub Secrets/Variables
-   - **Пересоздаёт VM** (Immutable Infrastructure approach) - новая VM с чистым состоянием
-   - Используется `create_before_destroy` для минимизации downtime
-   - Запускает `terraform plan` и `terraform apply -replace`
+   - Выполняет rolling update через Instance Group
+   - **Zero-downtime**: новые VM создаются, старые удаляются после health check
+   - Выводит домен и количество инстансов
 
-### Ручной запуск деплоя
+### Как работает rolling update
 
-```bash
-# Новая версия = новая VM (пересоздать)
-terraform taint module.compute.yandex_compute_instance.main
-terraform apply
-
-# Или обновить образ на существующей VM
-yc compute connect-to-serial-port $(yc compute instance list --format=json | jq -r '.[0].id')
-sudo docker pull cellardooor/blank:latest
-sudo systemctl restart messenger-app
+```
+1. Terraform видит новый Docker образ
+2. Instance Group создаёт новую VM с новым образом
+3. Новая VM проходит health check
+4. ALB начинает слать трафик на новую VM
+5. Старая VM удаляется
+6. Повторяется для всех VM в группе
 ```
 
 ## Terraform State
@@ -230,12 +255,14 @@ State хранится в **Yandex Object Storage (S3)**:
 ├── cmd/server/           # Go backend код
 ├── internal/             # Internal packages
 ├── web/                  # Frontend статика
-├── Dockerfile            # Docker образ
-├── docker-compose.yml    # Local development
+├── Dockerfile            # Docker образ (только приложение, без PostgreSQL)
+├── docker-compose.yml    # Local development (с локальным PostgreSQL)
 ├── terraform/            # Infrastructure
-│   ├── network/          # VPC, subnet, security group
-│   ├── compute/          # VM с cloud-init
-│   └── envs/dev/         # Dev окружение
+│   ├── alb/             # Application Load Balancer
+│   ├── compute/         # Instance Group
+│   ├── database/        # Managed PostgreSQL
+│   ├── network/         # VPC, subnets, security groups
+│   └── envs/dev/        # Dev окружение
 └── .github/workflows/    # CI/CD
     └── deploy.yml        # Build + Deploy pipeline
 ```
@@ -245,22 +272,124 @@ State хранится в **Yandex Object Storage (S3)**:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `HTTP_ADDR` | Server bind address | `:8080` |
-| `JWT_SECRET` | JWT signing key | `change-in-production` |
+| `JWT_SECRET` | JWT signing key | `<base64-string>` |
 | `JWT_DURATION` | Token lifetime | `24h` |
-| `DB_HOST` | Database host | `localhost` |
-| `DB_PORT` | Database port | `5432` |
+| `DB_HOST` | Managed PostgreSQL host | `rc1a-...mdb.yandexcloud.net` |
+| `DB_PORT` | PostgreSQL port | `6432` |
 | `DB_USER` | Database user | `messenger` |
-| `DB_PASSWORD` | Database password | `messenger` |
+| `DB_PASSWORD` | Database password | `<password>` |
 | `DB_NAME` | Database name | `messenger` |
-| `DB_SSLMODE` | SSL mode | `disable` |
+| `DB_SSLMODE` | SSL mode | `require` |
 
 ## Доступ к приложению
 
-После деплоя получи IP адрес:
+После деплоя:
+
 ```bash
-terraform output public_ip
+# Получить ALB IP
+terraform output alb_ip_address
+
+# Получить домен
+terraform output domain
 ```
 
-- API: `http://<public_ip>:8080`
-- Web UI: `http://<public_ip>:8080`
-- WebSocket: `ws://<public_ip>:8080/ws` (accepts connections from any origin)
+- **Web UI**: `https://<domain>`
+- **API**: `https://<domain>/api/`
+- **WebSocket**: `wss://<domain>/ws`
+
+## Мониторинг и отладка
+
+### Проверить статус Instance Group
+
+```bash
+yc compute instance-group list
+yc compute instance-group get <group-id>
+```
+
+### Проверить ALB
+
+```bash
+yc alb load-balancer list
+yc alb backend-group list
+```
+
+### Логи приложения
+
+```bash
+# Подключиться к VM по serial console
+yc compute connect-to-serial-port <instance-id>
+
+# Посмотреть логи контейнера
+sudo docker logs messenger-app
+```
+
+### Проверить подключение к PostgreSQL
+
+```bash
+# С одной из VM
+psql "host=<db_host> port=6432 user=<user> dbname=<db> sslmode=require"
+```
+
+## Troubleshooting
+
+### ALB показывает unhealthy backends
+
+1. Проверить health endpoint: `curl http://<vm-ip>:8080/api/health`
+2. Проверить security groups (App SG должен разрешать 8080 от ALB)
+3. Проверить логи приложения
+
+### Не работает WebSocket
+
+1. Убедиться, что используется `wss://` (не `ws://`)
+2. Проверить, что JWT токен валидный
+3. ALB поддерживает WebSocket по умолчанию
+
+### Нет подключения к PostgreSQL
+
+1. Проверить `DB_HOST` (должен быть FQDN Managed PostgreSQL)
+2. Проверить `DB_SSLMODE=require`
+3. Проверить Security Group (DB SG разрешает 6432 только из App subnet)
+4. Проверить, что Managed PostgreSQL создан и запущен
+
+## Масштабирование
+
+### Увеличить количество инстансов
+
+Изменить в GitHub Variables:
+- `MIN_INSTANCES=4`
+- `MAX_INSTANCES=8`
+
+Следующий деплой применит изменения.
+
+### Включить auto-scaling
+
+В `terraform/compute/instance_group.tf` изменить `scale_policy`:
+
+```hcl
+scale_policy {
+  auto_scale {
+    min_zone_size = 2
+    max_size      = var.max_instances
+    measurement_duration = 60
+    cpu_utilization_target = 75
+    warmup_duration = 120
+  }
+}
+```
+
+## Безопасность
+
+- **Network Segmentation**: 3 подсети с разным уровнем доступа
+- **Least Privilege**: Security Groups разрешают только необходимые порты
+- **SSL/TLS**: HTTPS для клиентов, SSL для PostgreSQL
+- **No Public Access**: VM и PostgreSQL недоступны из интернета напрямую
+- **Secrets**: Все credentials в GitHub Secrets
+
+## Стоимость (примерная)
+
+- **ALB**: ~$20-30/мес
+- **2x VM (s2.micro)**: ~$15-20/мес
+- **Managed PostgreSQL (s2.micro)**: ~$30-40/мес
+- **Итого**: ~$65-90/мес
+
+Для тестирования можно использовать меньшие инстансы.

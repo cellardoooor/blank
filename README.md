@@ -12,6 +12,7 @@ Production-ready messenger backend on Go with PostgreSQL and WebSocket support.
 - Docker support
 - Terraform infrastructure for Yandex Cloud
 - Custom Chicago font for all UI text
+- **Scalable Architecture**: Load Balancer + Instance Group + Managed PostgreSQL
 
 ## Quick Start
 
@@ -22,7 +23,7 @@ Production-ready messenger backend on Go with PostgreSQL and WebSocket support.
 git clone <repo-url>
 cd messenger
 
-# Start dependencies
+# Start dependencies (local PostgreSQL in Docker)
 docker-compose up -d postgres
 
 # Run application
@@ -51,8 +52,39 @@ docker push cellardooor/blank:latest
 │   ├── storage/         # Data access layer
 │   └── ws/              # WebSocket handlers
 ├── web/                 # Frontend static files (Chicago font)
-├── terraform/           # Infrastructure as Code
+├── terraform/           # Infrastructure as Code (ALB, Instance Group, Managed PostgreSQL)
 └── migrations/          # Database migrations
+```
+
+## Architecture
+
+```
+Internet
+    |
+    | HTTPS (443)
+    v
+┌─────────────────────────────────────┐
+│  Yandex Application Load Balancer   │
+│  • TLS Termination                  │
+│  • HTTP → HTTPS redirect            │
+│  • Health checks                    │
+└──────────────┬──────────────────────┘
+               | HTTP (8080)
+               v
+┌─────────────────────────────────────┐
+│  Yandex Compute Instance Group      │
+│  • Min: 2 VMs                       │
+│  • Auto-healing                     │
+│  • Rolling updates                  │
+└──────────────┬──────────────────────┘
+               | PostgreSQL (6432) + SSL
+               v
+┌─────────────────────────────────────┐
+│  Yandex Managed PostgreSQL          │
+│  • Version 15                       │
+│  • Private subnet                   │
+│  • Automatic backups                │
+└─────────────────────────────────────┘
 ```
 
 ## API Endpoints
@@ -64,17 +96,21 @@ docker push cellardooor/blank:latest
 | GET | /api/users/{id} | Yes | Get user info |
 | POST | /api/messages | Yes | Send message |
 | GET | /api/messages/{user_id} | Yes | Get message history |
-| GET | /ws | Yes | WebSocket connection (accepts all origins) |
+| GET | /ws | Yes | WebSocket connection |
 
-**Note:** WebSocket endpoint allows connections from any origin for cloud deployment flexibility.
+**URLs:**
+- Web UI: `https://<your-domain>`
+- API: `https://<your-domain>/api/`
+- WebSocket: `wss://<your-domain>/ws`
 
 ## Deployment
 
 ### Prerequisites
 
 1. **Yandex Cloud Account**: [cloud.yandex.ru](https://cloud.yandex.ru)
-2. **YC_TOKEN**: OAuth token for Terraform (see [Getting YC_TOKEN](#getting-yctoken))
+2. **YC_TOKEN**: OAuth token for Terraform
 3. **Docker Hub Account**: For pushing images
+4. **Domain**: A domain name pointed to Yandex Cloud (for HTTPS)
 
 ### Infrastructure Setup
 
@@ -83,14 +119,14 @@ cd terraform/envs/dev
 
 # Copy and edit variables
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your YC_TOKEN
+# Edit terraform.tfvars with your YC_TOKEN and DOMAIN
 
 # Deploy infrastructure
 terraform init
 terraform plan
 terraform apply
 
-# Output will show public_ip
+# Output will show ALB IP and domain
 ```
 
 ### CI/CD
@@ -104,59 +140,62 @@ GitHub Actions automatically builds and pushes Docker image on push to `main`.
 - `YC_S3_ACCESS_KEY` / `YC_S3_SECRET_KEY` - S3 backend credentials
 - `TF_STATE_BUCKET` - S3 bucket name for Terraform state
 - `JWT_SECRET` - JWT signing secret (generate with `openssl rand -base64 32`)
-- `DB_PASSWORD` - PostgreSQL password
+- `DB_PASSWORD` - Managed PostgreSQL password
+- `YC_SERVICE_ACCOUNT_ID` - Service account for Instance Group (optional)
 
-**Required Variables (non-sensitive):**
+**Required Variables:**
 - `YC_CLOUD_ID` - Yandex Cloud ID
 - `YC_FOLDER_ID` - Yandex Folder ID
-- `HTTP_ADDR` - Server bind address (default: `:8080`)
-- `JWT_DURATION` - Token lifetime (default: `24h`)
-- `DB_HOST` - Database host (default: `localhost`)
-- `DB_PORT` - Database port (default: `5432`)
-- `DB_USER` - Database user (default: `messenger`)
-- `DB_NAME` - Database name (default: `messenger`)
-- `DB_SSLMODE` - SSL mode (default: `disable`)
+- `DOMAIN` - Domain name (e.g., messenger.example.com)
+- `DB_USER` - Database user
+- `DB_NAME` - Database name
+- `MIN_INSTANCES` - Minimum VM count (default: 2)
+- `MAX_INSTANCES` - Maximum VM count (default: 4)
 
 ## Environment Variables
+
+### Application
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `HTTP_ADDR` | Server bind address | `:8080` |
 | `JWT_SECRET` | JWT signing secret | required |
 | `JWT_DURATION` | Token lifetime | `24h` |
-| `DB_HOST` | Database host | `localhost` |
-| `DB_PORT` | Database port | `5432` |
-| `DB_USER` | Database user | `messenger` |
-| `DB_PASSWORD` | Database password | `messenger` |
-| `DB_NAME` | Database name | `messenger` |
-| `DB_SSLMODE` | SSL mode | `disable` |
+| `DB_HOST` | Managed PostgreSQL host | required |
+| `DB_PORT` | PostgreSQL port | `6432` |
+| `DB_USER` | Database user | required |
+| `DB_PASSWORD` | Database password | required |
+| `DB_NAME` | Database name | required |
+| `DB_SSLMODE` | SSL mode | `require` |
+
+### Local Development Only
+
+```bash
+# For local development with docker-compose:
+DB_HOST=localhost
+DB_PORT=5432
+DB_SSLMODE=disable
+```
 
 ## Getting YC_TOKEN
 
 1. Go to [Yandex OAuth page](https://oauth.yandex.ru/authorize?response_type=token&client_id=1a6990aa636648e9b2ef855fa7bec454)
 2. Login with your Yandex account
 3. Copy the token from the URL or page
-4. Use it in `terraform.tfvars`:
-   ```hcl
-   yc_token = "y0_AgAAAAAA..."
-   ```
 
 Alternative via CLI:
 ```bash
-# Install Yandex CLI
 curl https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
-
-# Get OAuth token
 yc iam create-token
 ```
 
-## Architecture
+## Key Features
 
-- **Stateless**: No server-side sessions, JWT tokens only
-- **Horizontal scaling ready**: Can run multiple instances behind LB
-- **Image-based deploy**: New version = new VM with pulled image
-- **No managed services**: Self-contained on single VM
-- **WebSocket**: Accepts connections from any origin (cloud deployment ready)
+- **Stateless**: JWT tokens only, no sessions
+- **Highly Available**: Min 2 VMs with auto-healing
+- **Scalable**: Instance Group with auto-scaling support
+- **Secure**: HTTPS, SSL for database, restrictive security groups
+- **Zero-downtime**: Rolling updates via Instance Group
 - **Frontend**: Custom Chicago font applied to all UI elements
 
 ## License

@@ -3,6 +3,9 @@ yc_cloud_id  = "YOUR_CLOUD_ID"
 yc_folder_id = "YOUR_FOLDER_ID"
 yc_token     = "YOUR_YC_OAUTH_TOKEN_HERE"
 
+# Domain Configuration
+domain = "messenger.example.com"
+
 # Docker Image
 docker_image = "cellardooor/blank:latest"
 
@@ -10,11 +13,19 @@ docker_image = "cellardooor/blank:latest"
 jwt_secret  = "generate-with-openssl-rand-base64-32"
 db_password = "strong-password-min-12-chars"
 
+# Default User (optional)
+default_user     = "admin"
+default_password = "admin123"
+
 # Application Configuration (можно оставить по умолчанию)
-http_addr    = ":8080"
 jwt_duration = "24h"
-db_host      = "localhost"
-db_port      = "5432"
-db_user      = "messenger"
-db_name      = "messenger"
-db_sslmode   = "disable"
+
+# Scaling Configuration
+min_instances = 2
+max_instances = 4
+
+# Service Account (optional - will use default if not specified)
+# service_account_id = "YOUR_SERVICE_ACCOUNT_ID"
+
+# Certificate (optional - for imported certificate instead of Let's Encrypt)
+# certificate_id = "YOUR_CERTIFICATE_ID"

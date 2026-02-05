@@ -1,14 +1,14 @@
-output "instance_id" {
-  description = "Compute instance ID"
-  value       = yandex_compute_instance.main.id
+output "instance_group_id" {
+  description = "Instance group ID"
+  value       = yandex_compute_instance_group.main.id
 }
 
-output "public_ip" {
-  description = "Public IP address of the instance"
-  value       = yandex_compute_instance.main.network_interface[0].nat_ip_address
+output "instance_group_name" {
+  description = "Instance group name"
+  value       = yandex_compute_instance_group.main.name
 }
 
-output "private_ip" {
-  description = "Private IP address of the instance"
-  value       = yandex_compute_instance.main.network_interface[0].ip_address
+output "instance_count" {
+  description = "Current number of instances in the group"
+  value       = yandex_compute_instance_group.main.scale_policy[0].fixed_scale[0].size
 }

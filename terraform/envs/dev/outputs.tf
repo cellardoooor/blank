@@ -3,27 +3,73 @@ output "vpc_id" {
   value       = module.network.vpc_id
 }
 
-output "subnet_id" {
-  description = "Subnet ID"
-  value       = module.network.subnet_id
+output "public_subnet_id" {
+  description = "Public subnet ID for ALB"
+  value       = module.network.public_subnet_id
 }
 
-output "security_group_id" {
-  description = "Security Group ID"
-  value       = module.network.security_group_id
+output "app_subnet_id" {
+  description = "Application subnet ID for VMs"
+  value       = module.network.app_subnet_id
 }
 
-output "instance_id" {
-  description = "Compute Instance ID"
-  value       = module.compute.instance_id
+output "db_subnet_id" {
+  description = "Database subnet ID"
+  value       = module.network.db_subnet_id
 }
 
-output "public_ip" {
-  description = "Public IP address of the instance"
-  value       = module.compute.public_ip
+output "alb_security_group_id" {
+  description = "ALB Security Group ID"
+  value       = module.network.alb_security_group_id
 }
 
-output "private_ip" {
-  description = "Private IP address of the instance"
-  value       = module.compute.private_ip
+output "app_security_group_id" {
+  description = "App Security Group ID"
+  value       = module.network.app_security_group_id
+}
+
+output "db_security_group_id" {
+  description = "DB Security Group ID"
+  value       = module.network.db_security_group_id
+}
+
+output "alb_id" {
+  description = "Application Load Balancer ID"
+  value       = module.alb.alb_id
+}
+
+output "alb_ip_address" {
+  description = "ALB external IP address"
+  value       = module.alb.alb_ip_address
+}
+
+output "domain" {
+  description = "Configured domain name"
+  value       = var.domain
+}
+
+output "instance_group_id" {
+  description = "Instance Group ID"
+  value       = module.compute.instance_group_id
+}
+
+output "instance_count" {
+  description = "Current number of instances"
+  value       = module.compute.instance_count
+}
+
+output "database_cluster_id" {
+  description = "Managed PostgreSQL cluster ID"
+  value       = module.database.cluster_id
+}
+
+output "database_host" {
+  description = "Managed PostgreSQL host"
+  value       = module.database.cluster_host
+}
+
+output "database_connection_string" {
+  description = "PostgreSQL connection string (sensitive)"
+  value       = module.database.connection_string
+  sensitive   = true
 }

@@ -1,5 +1,5 @@
-variable "instance_name" {
-  description = "Compute instance name"
+variable "instance_group_name" {
+  description = "Instance group name"
   type        = string
   default     = "messenger-backend"
 }
@@ -11,13 +11,13 @@ variable "zone" {
 }
 
 variable "cores" {
-  description = "Number of CPU cores"
+  description = "Number of CPU cores per instance"
   type        = number
   default     = 2
 }
 
 variable "memory" {
-  description = "Memory in GB"
+  description = "Memory in GB per instance"
   type        = number
   default     = 4
 }
@@ -29,7 +29,7 @@ variable "disk_size" {
 }
 
 variable "subnet_id" {
-  description = "Subnet ID for the instance"
+  description = "Subnet ID for instances (app subnet)"
   type        = string
 }
 
@@ -40,7 +40,7 @@ variable "security_group_ids" {
 }
 
 variable "docker_image" {
-  description = "Docker image URL (e.g., cr.yandex/crp9svl97k0d9j7dvi0n/messenger:latest)"
+  description = "Docker image URL"
   type        = string
 }
 
@@ -75,15 +75,14 @@ variable "jwt_duration" {
 }
 
 variable "db_host" {
-  description = "Database host"
+  description = "Managed PostgreSQL host"
   type        = string
-  default     = "localhost"
 }
 
 variable "db_port" {
   description = "Database port"
   type        = string
-  default     = "5432"
+  default     = "6432"
 }
 
 variable "db_user" {
@@ -101,7 +100,7 @@ variable "db_name" {
 variable "db_sslmode" {
   description = "SSL mode"
   type        = string
-  default     = "disable"
+  default     = "require"
 }
 
 variable "app_port" {
@@ -121,4 +120,36 @@ variable "default_password" {
   type        = string
   sensitive   = true
   default     = ""
+}
+
+variable "min_instances" {
+  description = "Minimum number of instances"
+  type        = number
+  default     = 2
+}
+
+variable "max_instances" {
+  description = "Maximum number of instances"
+  type        = number
+  default     = 4
+}
+
+variable "target_group_id" {
+  description = "ALB target group ID to attach instances"
+  type        = string
+}
+
+variable "folder_id" {
+  description = "Yandex Cloud folder ID"
+  type        = string
+}
+
+variable "network_id" {
+  description = "VPC network ID"
+  type        = string
+}
+
+variable "service_account_id" {
+  description = "Service account ID for instance group"
+  type        = string
 }

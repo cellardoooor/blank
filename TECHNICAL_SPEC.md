@@ -18,10 +18,11 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 
 ### 1.3 Architecture Principles
 - **Stateless**: JWT tokens only, no sessions
-- **Immutable Infrastructure**: New version = new VM
-- **Single VM deployment**: PostgreSQL + Application on same host
-- **Graceful degradation**: App starts even without database
-- **Self-contained**: No external managed services required
+- **Scalable**: Multi-tier architecture with load balancer and auto-scaling
+- **High Availability**: Minimum 2 VMs, managed database with backups
+- **Secure**: Network segmentation, TLS everywhere, least privilege access
+- **Cloud-native**: Uses Yandex Managed Services (PostgreSQL, ALB)
+- **Zero-downtime deployments**: Rolling updates via Instance Group
 
 ## 2. Technology Stack
 
@@ -61,7 +62,7 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 │   ├── auth/
 │   │   ├── service.go         # JWT token generation/validation + user validation (username 5-16 chars, password min 5)
 │   │   └── middleware.go      # HTTP auth middleware
-│   ├── config/config.go       # Configuration from env vars (includes DEFAULT_USER, DEFAULT_PASSWORD)
+│   ├── config/config.go       # Configuration from env vars (includes DEFAULT_USER, DEFAULT_PASSWORD, DOMAIN)
 │   ├── http/handler.go        # HTTP REST handlers + new endpoints (/api/users, /api/conversations)
 │   ├── model/
 │   │   ├── user.go            # User entity
@@ -74,22 +75,24 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 │   │   └── postgres/          # PostgreSQL implementations
 │   │       └── storage.go     # Storage + UserRepo + MessageRepo (updated methods)
 │   └── ws/
-│       ├── handler.go         # WebSocket HTTP handler
+│       ├── handler.go         # WebSocket HTTP handler (accepts all origins)
 │       └── hub.go             # WebSocket connection manager
 ├── web/                        # Frontend files (white background, black text styling)
 │   ├── index.html             # Main HTML (includes New Chat modal)
-│   ├── app.js                 # JavaScript application (dynamic contacts, user filtering)
-│   ├── style.css              # Styles (white bg, black text)
+│   ├── app.js                 # JavaScript application (dynamic contacts, user filtering, optimistic messages)
+│   ├── style.css              # Styles (white bg, black text, Chicago font)
 │   └── fonts/                 # Chicago Regular font files
 ├── migrations/
 │   ├── 001_init.sql           # Database schema
 │   └── 002_username_case_insensitive.sql  # Case-insensitive username index
-├── terraform/                  # Infrastructure
-│   ├── network/               # VPC, subnet, security groups
-│   ├── compute/               # VM with cloud-init (unique naming with timestamp)
+├── terraform/                  # Infrastructure (ALB, Instance Group, Managed PostgreSQL)
+│   ├── network/               # VPC with 3 subnets (public, app, db)
+│   ├── alb/                   # Application Load Balancer with HTTPS
+│   ├── compute/               # Instance Group with auto-scaling
+│   ├── database/              # Yandex Managed PostgreSQL
 │   └── envs/dev/              # Environment configuration
-├── docker-compose.yml         # Local development
-├── Dockerfile                 # Application image
+├── docker-compose.yml         # Local development (with local PostgreSQL)
+├── Dockerfile                 # Application image (Go app only, no PostgreSQL)
 └── .github/workflows/         # CI/CD
     └── deploy.yml
 ```
@@ -376,12 +379,13 @@ Health check endpoint.
 | HTTP_ADDR | Server bind address | `:8080` | No |
 | JWT_SECRET | JWT signing key | - | Yes |
 | JWT_DURATION | Token lifetime | `24h` | No |
-| DB_HOST | Database host | `localhost` | No |
-| DB_PORT | Database port | `5432` | No |
-| DB_USER | Database user | `messenger` | No |
-| DB_PASSWORD | Database password | `messenger` | No |
-| DB_NAME | Database name | `messenger` | No |
-| DB_SSLMODE | SSL mode | `disable` | No |
+| DB_HOST | Managed PostgreSQL host | - | Yes |
+| DB_PORT | PostgreSQL port | `6432` | No |
+| DB_USER | PostgreSQL user | - | Yes |
+| DB_PASSWORD | PostgreSQL password | - | Yes |
+| DB_NAME | PostgreSQL database name | - | Yes |
+| DB_SSLMODE | SSL mode | `require` | No |
+| DOMAIN | Domain name for HTTPS | - | Yes |
 | DEFAULT_USER | Default username to create on startup | - | No |
 | DEFAULT_PASSWORD | Default password for default user | - | No |
 
@@ -392,21 +396,25 @@ If `DEFAULT_USER` and `DEFAULT_PASSWORD` are set:
 3. Logs creation or "already exists" message
 4. Does not fail startup on error
 
-### 6.3 Database Connection String Format
+### 6.3 Database Connection String Format (Managed PostgreSQL)
 ```
-host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<mode>
+host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> sslmode=require
 ```
+
+**Note**: Managed PostgreSQL requires SSL (`sslmode=require`) and uses port 6432.
 
 ## 7. Component Details
 
 ### 7.1 Application Initialization (internal/app/app.go)
-1. Connect to PostgreSQL (graceful on failure)
+1. Connect to **Yandex Managed PostgreSQL** (SSL required)
 2. Initialize repositories
 3. Create services (auth, user, message)
 4. Setup WebSocket hub
 5. Build HTTP router with middleware
-6. Add health check endpoint
+6. Add health check endpoint (for ALB)
 7. **Seed default user** if DEFAULT_USER/DEFAULT_PASSWORD configured
+
+**Note**: Application now requires Managed PostgreSQL to start (no graceful degradation).
 
 ### 7.2 Authentication Service (internal/auth/service.go)
 - **Methods**:
@@ -600,6 +608,9 @@ ENTRYPOINT ["./server"]
 ```
 
 ### 9.2 Docker Compose (Local Development)
+
+**Note**: Local development uses containerized PostgreSQL. Production uses **Yandex Managed PostgreSQL** (external service).
+
 ```yaml
 version: '3.8'
 services:
@@ -644,50 +655,147 @@ volumes:
 ```
 
 ### 9.3 Production Deployment (cloud-init)
-- Install Docker and Docker Compose
+- Install Docker
 - Create `/opt/messenger/` directory
 - Write `.env` file with secrets (including DEFAULT_USER, DEFAULT_PASSWORD)
-- Write `docker-compose.yml` with PostgreSQL + App
-- Write `init.sql` with schema
-- Systemd service to manage docker-compose
-- PostgreSQL volume persisted on host
-- App waits for PostgreSQL healthcheck
+- Write `docker-compose.yml` with **only Application** (no PostgreSQL)
+- Systemd service to manage docker container
+- Application connects to **Yandex Managed PostgreSQL**
 - Restart policy: unless-stopped
 
-## 10. Infrastructure (Terraform)
+## 10. Infrastructure (Terraform) - Scalable Architecture
 
-### 10.1 Resources
-1. **Network Module**:
-   - VPC with CIDR `10.0.0.0/16`
-   - Subnet `10.0.1.0/24` in ru-central1-a
-   - Security Group:
-     - Ingress: 22 (SSH), 8080 (HTTP) from 0.0.0.0/0
-     - Egress: All
+### 10.1 Architecture Overview
 
-2. **Compute Module**:
-   - VM: Ubuntu 22.04 LTS
-   - Type: standard-v3 (2 cores, 4GB RAM, 20GB SSD)
-   - Public IP via NAT
-   - cloud-init user-data for provisioning
-   - **Unique naming**: `messenger-backend-YYYYMMDD-hhmm` timestamp suffix
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         Internet                             │
+└──────────────────────┬──────────────────────────────────────┘
+                       │ HTTPS (443)
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│           Yandex Application Load Balancer (ALB)            │
+│  • TLS Termination (Let's Encrypt or imported certificate)  │
+│  • HTTP → HTTPS redirect                                    │
+│  • Health checks: /api/health                              │
+│  • Sticky sessions for WebSocket (optional)                │
+└──────────────────────┬──────────────────────────────────────┘
+                       │ HTTP (8080)
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Yandex Compute Instance Group                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   VM 1       │  │   VM 2       │  │   VM N       │      │
+│  │  (App Only)  │  │  (App Only)  │  │  (App Only)  │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│  Min: 2 VMs, Max: Auto-scaling                             │
+└──────────┬──────────────────────────────────────────────────┘
+           │ PostgreSQL (6432)
+           │ SSL Mode: require
+           ▼
+┌─────────────────────────────────────────────────────────────┐
+│          Yandex Managed Service for PostgreSQL              │
+│  • Version: 15                                             │
+│  • Network: Same VPC (private subnet)                      │
+│  • Access: Only from application subnet                    │
+│  • SSL: Required                                           │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### 10.2 VM Lifecycle Strategy
-- **Create Before Destroy**: Новая VM создаётся перед удалением старой
-- **Zero Downtime**: Пока старая VM работает, новая разворачивается и запускается
-- **Immutable Infrastructure**: Каждый деплой = чистая VM с актуальным образом
-- **Automatic Cleanup**: Старая VM удаляется после успешного создания новой
-- **Unique Names**: VM names include timestamp to avoid conflicts during create-before-destroy
+### 10.2 Components
 
-### 10.3 Cloud-init Stages
+#### 1. Network Module
+- **VPC**: CIDR `10.0.0.0/16`
+- **Subnets**:
+  - `10.0.1.0/24` - Application subnet (ru-central1-a)
+  - `10.0.2.0/24` - Database subnet (ru-central1-a)
+- **Security Groups**:
+  - **ALB SG**: Ingress 443 from 0.0.0.0/0, Egress all
+  - **App SG**: Ingress 8080 from ALB subnet only, Egress all to DB subnet
+  - **DB SG**: Ingress 6432 from App subnet only, Egress none
+
+#### 2. Application Load Balancer (ALB)
+- **Listener**: HTTPS (443) with TLS 1.2+
+- **Backend Group**: Instance Group with HTTP (8080)
+- **Health Check**: GET /api/health every 5s
+- **Timeout**: 10s connection, 60s request
+- **Domain**: Configurable via `DOMAIN` variable
+
+#### 3. Compute Instance Group
+- **Image**: Container-Optimized Image with Docker
+- **Type**: standard-v3 (2 cores, 4GB RAM, 20GB SSD)
+- **Min Size**: 2 VMs (high availability)
+- **Max Size**: Configurable (default: 4)
+- **Auto-healing**: Recreate VM on health check failure
+- **Auto-scaling**: Based on CPU/memory (optional)
+
+#### 4. Managed PostgreSQL
+- **Service**: Yandex Managed Service for PostgreSQL
+- **Version**: 15
+- **Configuration**: 
+  - s2.micro (2 vCPU, 8GB RAM) or higher
+  - 20GB SSD storage
+- **Network**: Private subnet (10.0.2.0/24)
+- **Security**: 
+  - SSL required (sslmode=require)
+  - No public access
+  - Access only from application subnet
+- **Backup**: Daily automatic backups
+- **High Availability**: Optional master-replica
+
+#### 5. DNS Configuration
+- **Provider**: External (Cloudflare, Route53, etc.) or Yandex DNS
+- **Record Type**: A or CNAME pointing to ALB IP
+- **Domain**: Configured via `DOMAIN` environment variable
+- **Certificate**: Let's Encrypt (auto) or imported
+
+### 10.3 Security Groups Detail
+
+#### ALB Security Group
+```
+Ingress:
+  - 0.0.0.0/0:443 (HTTPS)
+  
+Egress:
+  - 10.0.1.0/24:8080 (to App VMs)
+```
+
+#### Application Security Group
+```
+Ingress:
+  - 10.0.0.0/16:8080 (from ALB only)
+  
+Egress:
+  - 10.0.2.0/24:6432 (to PostgreSQL)
+  - 0.0.0.0/0:443 (for Docker pulls, HTTPS)
+```
+
+#### Database Security Group
+```
+Ingress:
+  - 10.0.1.0/24:6432 (from App VMs only)
+  
+Egress:
+  - None (managed service)
+```
+
+### 10.4 VM Lifecycle Strategy
+- **Instance Group**: Managed by Yandex Compute
+- **Rolling Updates**: Replace VMs one by one during deployment
+- **Health Checks**: VM removed from LB if unhealthy
+- **Auto-healing**: Automatic recreation of failed VMs
+- **Immutable**: Each VM is stateless, ephemeral
+
+### 10.5 Cloud-init Stages
 1. Update packages
-2. Install Docker & Docker Compose
-3. Create `/opt/messenger/` structure
-4. Write configuration files (.env, docker-compose.yml, init.sql) - includes DEFAULT_USER/DEFAULT_PASSWORD
-5. Start messenger systemd service
-6. Docker Compose pulls and starts containers
-7. App seeds default user on first startup
+2. Configure Docker
+3. Login to Docker Hub (if private registry)
+4. Pull application image
+5. Create systemd service for container
+6. Start application with env vars from metadata
+7. Register with ALB via health checks
 
-### 10.4 Variables
+### 10.6 Variables
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | yc_token | string | - | YC OAuth token |
@@ -696,10 +804,17 @@ volumes:
 | zone | string | ru-central1-a | Availability zone |
 | docker_image | string | - | Docker image URL |
 | jwt_secret | string | - | JWT signing secret |
+| db_host | string | - | Managed PostgreSQL host |
+| db_port | string | `6432` | PostgreSQL port |
+| db_user | string | - | PostgreSQL user |
 | db_password | string | - | PostgreSQL password |
+| db_name | string | - | PostgreSQL database name |
+| db_sslmode | string | `require` | PostgreSQL SSL mode |
 | http_addr | string | `:8080` | Server bind address |
 | default_user | string | - | Default username for seeding |
 | default_password | string | - | Default password for seeding |
+| domain | string | - | Domain name for ALB |
+| cert_type | string | `letsencrypt` | Certificate type (letsencrypt/imported) |
 
 ## 11. CI/CD Pipeline
 
@@ -726,32 +841,36 @@ volumes:
    - Setup Terraform с YC mirror
    - Terraform init с S3 backend
    - Terraform plan
-   - Terraform apply -replace="module.compute..." (immutable infrastructure)
-   - Create before destroy lifecycle для минимизации downtime
-   - Output public IP
+   - Terraform apply (rolling update via Instance Group)
+   - ALB automatically registers new VMs
+   - Zero-downtime deployment
+   - Output ALB IP and domain
 
 ### 11.2 Required Secrets
-- `DOCKERHUB_USERNAME`
-- `DOCKERHUB_TOKEN`
-- `YC_TOKEN`
-- `YC_S3_ACCESS_KEY`
-- `YC_S3_SECRET_KEY`
-- `TF_STATE_BUCKET`
-- `JWT_SECRET`
-- `DB_PASSWORD`
-- `DEFAULT_USER` (NEW)
-- `DEFAULT_PASSWORD` (NEW)
+- `DOCKERHUB_USERNAME` - Docker Hub username
+- `DOCKERHUB_TOKEN` - Docker Hub access token
+- `YC_TOKEN` - Yandex Cloud OAuth token
+- `YC_S3_ACCESS_KEY` - S3 backend access key
+- `YC_S3_SECRET_KEY` - S3 backend secret key
+- `TF_STATE_BUCKET` - Terraform state bucket name
+- `JWT_SECRET` - JWT signing secret
+- `DB_PASSWORD` - Managed PostgreSQL password
+- `DEFAULT_USER` - Default username for seeding
+- `DEFAULT_PASSWORD` - Default password for seeding
 
 ### 11.3 Required Variables
-- `YC_CLOUD_ID`
-- `YC_FOLDER_ID`
-- `HTTP_ADDR`
-- `JWT_DURATION`
-- `DB_HOST`
-- `DB_PORT`
-- `DB_USER`
-- `DB_NAME`
-- `DB_SSLMODE`
+- `YC_CLOUD_ID` - Yandex Cloud ID
+- `YC_FOLDER_ID` - Yandex Folder ID
+- `DOMAIN` - Domain name for application (e.g., messenger.example.com)
+- `DB_HOST` - Managed PostgreSQL host (from Yandex Console)
+- `DB_PORT` - PostgreSQL port (default: 6432)
+- `DB_USER` - PostgreSQL username
+- `DB_NAME` - PostgreSQL database name
+- `DB_SSLMODE` - SSL mode (default: require)
+- `HTTP_ADDR` - Server bind address (default: :8080)
+- `JWT_DURATION` - Token lifetime (default: 24h)
+- `MIN_INSTANCES` - Minimum VM count (default: 2)
+- `MAX_INSTANCES` - Maximum VM count (default: 4)
 
 ## 12. Dependencies
 
@@ -768,8 +887,10 @@ golang.org/x/crypto v0.18.0
 
 ### 12.2 External Services
 - Docker Hub (image registry)
-- Yandex Cloud (compute, network, object storage)
-- PostgreSQL 15 (database)
+- Yandex Cloud (compute, network, ALB, managed database)
+- Yandex Managed Service for PostgreSQL 15
+- DNS Provider (for domain configuration)
+- Let's Encrypt (TLS certificates)
 
 ## 13. Error Handling
 
@@ -797,10 +918,10 @@ golang.org/x/crypto v0.18.0
 ```
 
 ### 13.4 Graceful Degradation
-- If PostgreSQL unavailable: App starts in "degraded" mode
+- If PostgreSQL unavailable: App fails to start (Managed PostgreSQL is required)
 - Health endpoint returns 503 when DB down
-- Registration/login fail with clear error messages
-- WebSocket works with in-memory message delivery (no persistence)
+- ALB removes unhealthy VMs from rotation
+- Auto-healing recreates failed VMs automatically
 - Default user seeding failure does not block startup
 
 ## 14. Security Considerations
@@ -819,11 +940,20 @@ golang.org/x/crypto v0.18.0
 - Connection pooling (pgxpool)
 
 ### 14.3 Infrastructure
-- Non-root container user (distroless)
-- Security groups restrict ports
-- Secrets via environment variables (never committed)
-- Terraform state in encrypted S3 bucket
-- Default credentials via GitHub Secrets (never in code)
+- **Network Segmentation**:
+  - ALB in DMZ (public subnet)
+  - App VMs in private subnet
+  - PostgreSQL in isolated database subnet
+- **Security Groups**: Restrictive rules (least privilege)
+  - PostgreSQL accessible only from app subnet
+  - App VMs accessible only from ALB
+  - No direct public access to VMs or DB
+- **TLS**: End-to-end encryption
+  - HTTPS (443) from clients to ALB
+  - HTTP (8080) from ALB to VMs (internal network)
+  - SSL (6432) from VMs to PostgreSQL
+- **Secrets**: All credentials via GitHub Secrets, never in code
+- **Terraform State**: Encrypted in S3 bucket
 
 ## 15. Testing Strategy
 
@@ -847,73 +977,101 @@ golang.org/x/crypto v0.18.0
 
 ## 16. Deployment Checklist
 
-### 16.1 First Deployment
+### 16.1 First Deployment - Scalable Architecture
+
+#### Prerequisites
 1. Create Yandex Cloud account
 2. Get YC_TOKEN via OAuth
 3. Create S3 bucket for Terraform state
 4. Create service account with storage.editor role
 5. Generate S3 access keys
-6. Set all GitHub Secrets (including DEFAULT_USER, DEFAULT_PASSWORD)
-7. Set all GitHub Variables
-8. Push to main branch
-9. Verify deployment in Actions logs
-10. Test endpoints: health, register, login, WebSocket
-11. Verify default user created (if configured)
+6. Configure DNS domain (e.g., messenger.example.com)
+
+#### Infrastructure Setup
+7. Set all GitHub Secrets (see Section 11.2)
+8. Set all GitHub Variables (see Section 11.3)
+9. Push to main branch
+10. Terraform creates:
+    - VPC with 3 subnets (public, app, db)
+    - Security groups with restricted access
+    - Yandex Managed PostgreSQL (private subnet)
+    - Application Load Balancer with HTTPS
+    - Instance Group with 2+ VMs
+11. Verify in Actions logs
+12. Configure DNS: Point domain to ALB IP address
+13. Wait for Let's Encrypt certificate provisioning
+14. Test endpoints:
+    - HTTPS: `https://<domain>/api/health`
+    - WebSocket: `wss://<domain>/ws`
+15. Verify default user created (if configured)
 
 ### 16.2 Subsequent Deployments
 1. Push changes to main
-2. CI/CD automatically builds new image
-3. Terraform recreates VM with new image (unique name with timestamp)
-4. Docker Compose starts services
-5. App seeds default user if configured
-6. Verify in browser: `http://<public_ip>:8080`
+2. CI/CD automatically builds new Docker image
+3. Terraform rolling update via Instance Group:
+   - Creates new VM with updated image
+   - Waits for health check
+   - Removes old VM from LB
+   - Repeats for all VMs
+4. Zero-downtime deployment complete
+5. Verify in browser: `https://<domain>`
 
 ## 17. Troubleshooting
 
-### 17.1 Common Issues
-**App starts but database unavailable**:
-- Check PostgreSQL container logs: `docker logs messenger-postgres`
-- Verify env vars in `/opt/messenger/.env`
-- Check network: `docker network inspect messenger-network`
+### 17.1 Common Issues - Scalable Architecture
 
-**Cannot connect to port 8080**:
-- Verify security group allows 8080
-- Check Docker Compose port mapping
-- Check app is listening on 0.0.0.0:8080
+**ALB shows no healthy backends**:
+- Check Instance Group health: Yandex Console → Compute → Instance Groups
+- Verify VMs are running and passing health checks
+- Check security groups: App SG must allow 8080 from ALB subnet
+- Review VM logs via serial console
 
-**Cloud-init fails**:
-- Check YAML syntax validity
-- Review serial console logs
-- Verify template variables substituted correctly
+**Cannot connect to PostgreSQL**:
+- Verify DB_HOST points to Managed PostgreSQL (not localhost)
+- Check DB_SG allows 6432 from App subnet only
+- Verify SSL mode is set to "require"
+- Test connection from VM: `psql -h <db_host> -U <user> -d <db>`
 
-**Default user not created**:
-- Check app logs for seeding messages
-- Verify DEFAULT_USER and DEFAULT_PASSWORD in `.env`
-- Ensure database connection successful
+**Certificate not issued**:
+- Verify DNS A record points to ALB IP
+- Check domain variable matches DNS record
+- Allow 5-10 minutes for Let's Encrypt validation
+- For imported certs, verify certificate chain
 
-**VM creation fails with "AlreadyExists"**:
-- VM naming now includes timestamp (fixed)
-- Verify no orphaned VMs with similar names
+**WebSocket connection fails**:
+- Ensure connecting via `wss://` (not `ws://`)
+- Check ALB supports WebSocket protocol
+- Verify JWT token is valid and not expired
+
+**Auto-scaling not working**:
+- Check Instance Group settings in Yandex Console
+- Verify target CPU/memory metrics
+- Review scaling policies
 
 ### 17.2 Debug Commands
 ```bash
+# Check ALB status
+yc alb load-balancer list
+yc alb backend-group list
+
+# Check Instance Group
+yc compute instance-group list
+yc compute instance-group get <group-id>
+
 # VM access via serial console
 yc compute connect-to-serial-port <instance-id>
 
-# Check service status
-sudo systemctl status messenger
+# Check container logs on VM
+sudo docker logs messenger-app
 
-# View logs
-sudo docker compose -f /opt/messenger/docker-compose.yml logs
-
-# Test database connection
-psql -h localhost -U messenger -d messenger
+# Test database connection from VM
+psql "host=<db_host> port=6432 user=<user> dbname=<db> sslmode=require"
 
 # Check environment
 cat /opt/messenger/.env
 
-# View app logs for default user seeding
-docker logs messenger-app | grep -i "default user"
+# View ALB logs (if enabled)
+yc logging read --group-id=<log-group-id>
 ```
 
 ## 18. Future Enhancements
@@ -929,11 +1087,11 @@ docker logs messenger-app | grep -i "default user"
 - User avatars
 - Message read receipts
 
-### 18.2 Scaling
-- Separate PostgreSQL to managed service (Yandex Managed PostgreSQL)
-- Multiple app instances behind load balancer
-- Redis for WebSocket pub/sub
-- Read replicas for database
+### 18.2 Scaling (Implemented)
+- ✅ Separate PostgreSQL to managed service (Yandex Managed PostgreSQL)
+- ✅ Multiple app instances behind load balancer (ALB)
+- Redis for WebSocket pub/sub (future)
+- Read replicas for database (future)
 
 ### 18.3 Monitoring
 - Prometheus metrics
@@ -990,11 +1148,25 @@ When modifying this project, maintain:
 
 ---
 
-**Version**: 1.4
+**Version**: 2.0
 **Last Updated**: 2026-02-05
 **Maintainer**: AI Assistant
 
 ## Changelog
+
+### Version 2.0 (2026-02-05) - Scalable Architecture
+- **Infrastructure Overhaul**: Moved from single VM to scalable multi-tier architecture
+  - **Application Load Balancer (ALB)**: HTTPS termination with automatic certificate management
+  - **Instance Group**: Minimum 2 VMs with auto-scaling support
+  - **Yandex Managed PostgreSQL**: External managed database in private subnet
+  - **Network Segmentation**: 3-tier architecture (DMZ, App, DB subnets)
+  - **Security**: Restrictive security groups (least privilege principle)
+- **DNS Support**: Added `DOMAIN` variable for custom domain configuration
+- **TLS/SSL**: End-to-end encryption (HTTPS + PostgreSQL SSL)
+- **Zero-downtime deployments**: Rolling updates via Instance Group
+- **Removed**: PostgreSQL from Docker container (now external service)
+- **Updated**: All connection strings for Managed PostgreSQL
+- **Updated**: Security groups to restrict database access
 
 ### Version 1.4 (2026-02-05)
 - **Bug Fixes**:
