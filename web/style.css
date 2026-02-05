@@ -383,8 +383,9 @@ body {
 
 .message.outgoing {
     align-self: flex-end;
-    background: #000000;
-    color: #ffffff;
+    background: #ffffff;
+    color: #000000;
+    border: 1px solid #000000;
     border-bottom-right-radius: 4px;
 }
 
@@ -401,7 +402,16 @@ body {
 }
 
 .message.outgoing .message-time {
-    color: #cccccc;
+    color: #666666;
+}
+
+/* Optimistic (sending) messages - gray text on white background */
+.message.optimistic .message-text {
+    color: #999999;
+}
+
+.message.optimistic {
+    background: #ffffff !important;
 }
 
 #input-area {

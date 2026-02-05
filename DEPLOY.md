@@ -263,4 +263,4 @@ terraform output public_ip
 
 - API: `http://<public_ip>:8080`
 - Web UI: `http://<public_ip>:8080`
-- WebSocket: `ws://<public_ip>:8080/ws`
+- WebSocket: `ws://<public_ip>:8080/ws` (accepts connections from any origin)

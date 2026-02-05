@@ -11,6 +11,7 @@ Production-ready messenger backend on Go with PostgreSQL and WebSocket support.
 - Stateless backend (ready for horizontal scaling)
 - Docker support
 - Terraform infrastructure for Yandex Cloud
+- Custom Chicago font for all UI text
 
 ## Quick Start
 
@@ -49,7 +50,7 @@ docker push cellardooor/blank:latest
 │   ├── service/         # Business logic
 │   ├── storage/         # Data access layer
 │   └── ws/              # WebSocket handlers
-├── web/                 # Frontend static files
+├── web/                 # Frontend static files (Chicago font)
 ├── terraform/           # Infrastructure as Code
 └── migrations/          # Database migrations
 ```
@@ -63,7 +64,9 @@ docker push cellardooor/blank:latest
 | GET | /api/users/{id} | Yes | Get user info |
 | POST | /api/messages | Yes | Send message |
 | GET | /api/messages/{user_id} | Yes | Get message history |
-| GET | /ws | Yes | WebSocket connection |
+| GET | /ws | Yes | WebSocket connection (accepts all origins) |
+
+**Note:** WebSocket endpoint allows connections from any origin for cloud deployment flexibility.
 
 ## Deployment
 
@@ -153,6 +156,8 @@ yc iam create-token
 - **Horizontal scaling ready**: Can run multiple instances behind LB
 - **Image-based deploy**: New version = new VM with pulled image
 - **No managed services**: Self-contained on single VM
+- **WebSocket**: Accepts connections from any origin (cloud deployment ready)
+- **Frontend**: Custom Chicago font applied to all UI elements
 
 ## License
 

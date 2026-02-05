@@ -39,6 +39,7 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 - **Files**: HTML, CSS, Vanilla JavaScript
 - **Location**: `/web/` directory, served by Go server
 - **Styling**: White background (#fff), black text (#000) for high contrast
+- **Font**: Chicago Regular font applied to all UI elements including inputs and messages
 
 ### 2.3 Infrastructure
 - **Containerization**: Docker + Docker Compose
@@ -78,7 +79,8 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 ├── web/                        # Frontend files (white background, black text styling)
 │   ├── index.html             # Main HTML (includes New Chat modal)
 │   ├── app.js                 # JavaScript application (dynamic contacts, user filtering)
-│   └── style.css              # Styles (white bg, black text)
+│   ├── style.css              # Styles (white bg, black text)
+│   └── fonts/                 # Chicago Regular font files
 ├── migrations/
 │   ├── 001_init.sql           # Database schema
 │   └── 002_username_case_insensitive.sql  # Case-insensitive username index
@@ -425,12 +427,14 @@ host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<m
   - User ID → Connection mapping
   - Broadcast to specific user
   - Automatic reconnection support
-  - Heartbeat/ping-pong (optional)
+  - Heartbeat/ping-pong (60s read timeout, 54s ping interval)
+  - **Accepts all origins** for cloud deployment flexibility
 - **Message Flow**:
-  1. Client connects with JWT token
+  1. Client connects with JWT token via query param: `?token=<jwt>`
   2. Hub stores connection mapped to user ID
   3. Incoming messages routed by receiver_id
   4. If receiver offline, message stored in DB for later delivery
+  5. Optimistic message confirmation replaces temporary gray message
 
 ### 7.4 Storage Layer (internal/storage/postgres/)
 **Storage struct**:
@@ -516,16 +520,17 @@ host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<m
 ### 8.6 Chat Window (Right Panel)
 - **Header**: Avatar + Username + Status
 - **Messages Area**: Scrollable container with bubbles
-  - **Outgoing (me)**: Black background (#000), white text, right-aligned, rounded corners
-  - **Incoming (other)**: Light gray background (#f0f0f0), black text, left-aligned, rounded corners
-  - **Timestamp**: Small text below message (local time)
+  - **All messages**: White background (#fff), black text, rounded corners
+  - **Optimistic messages**: Gray text (#999999) while sending, replaced by black text after confirmation
+  - **Message confirmation**: Temporary gray message replaced by confirmed message from server
+  - **Timestamp**: Small gray text below message (local time)
     - Same day: "HH:MM" ("15:30")
     - Different day: "MMM DD, HH:MM" ("Feb 28, 15:30")
 - **Input Area**: Auto-resizing textarea + Send button
 - **Empty State**:
   - When no chats exist, right panel shows blank white space
   - No icons, no text, no buttons in empty state
-  - "New Chat" button remains in sidebar (normal position)
+  - "New Chat" button in sidebar (normal position)
   - "New Chat" button displayed at bottom of contacts list when empty
 
 ### 8.7 New Chat Modal
@@ -547,9 +552,10 @@ host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<m
 - Uses `Intl.DateTimeFormat` for formatting
 - English only for all UI text
 
-### 8.9 Styling (Telegram-like)
+### 8.9 Styling
 - **Background**: White (#ffffff) for all containers
 - **Text**: Black (#000000) for primary text
+- **Font**: Chicago Regular for all UI elements including inputs and textareas
 - **Error Messages**: Black color (#000000) for all error text
 - **Secondary Text**: Gray (#666666 or #999999) for less important elements:
   - Timestamps
@@ -558,8 +564,8 @@ host=<host> port=<port> user=<user> password=<password> dbname=<name> sslmode=<m
   - Status indicators
 - **All User-Facing Text**: English only, no translations
 - **Message Bubbles**:
-  - Outgoing: Black bg (#000), white text
-  - Incoming: Light gray bg (#f0f0f0), black text, 1px border (#e0e0e0)
+  - All messages: White bg (#fff), black text, 1px black border (#000)
+  - Optimistic (sending): Gray text (#999999), white bg
 - **Active Chat**: Black background (#000) with white text in sidebar
 - **Hover States**: Light gray (#f5f5f5)
 - **Borders**: Light gray (#e0e0e0) 1px, or black (#000000) 2px for emphasis
@@ -983,11 +989,24 @@ When modifying this project, maintain:
 
 ---
 
-**Version**: 1.3
-**Last Updated**: 2026-02-03
+**Version**: 1.4
+**Last Updated**: 2026-02-05
 **Maintainer**: AI Assistant
 
 ## Changelog
+
+### Version 1.4 (2026-02-05)
+- **Bug Fixes**:
+  - Fixed WebSocket connection issues on cloud deployment (changed CheckOrigin to accept all origins)
+  - Fixed message duplication: optimistic messages now show gray text, replaced by confirmed black text
+  - Fixed route ordering: WebSocket endpoint registered before static file catch-all
+- **UI Updates**:
+  - All messages now have white background with black text
+  - Optimistic messages show gray text (#999999) while sending
+  - Applied Chicago font to all text elements including inputs and textareas
+- **Backend Updates**:
+  - WebSocket payload type changed from []byte to string for consistency
+  - Removed unused imports
 
 ### Version 1.3 (2026-02-03)
 - **UI Cleanup**: Removed title and input limitation hints from authentication screen
@@ -1021,6 +1040,8 @@ When modifying this project, maintain:
   - Smooth animations and transitions
   - Responsive design for mobile
   - Enhanced "New Chat" modal with search and filtering
+  - Optimistic message sending with gray→black text transition
+  - Chicago font applied to all UI elements
 
 ### Version 1.1 (2026-02-03)
 - Added validation: username 5-16 characters, password minimum 5 characters

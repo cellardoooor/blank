@@ -226,9 +226,18 @@ function handleIncomingMessage(msg) {
     // Update chat list
     updateChatFromMessage(partnerId, msg);
     
-    // If this is the active chat, display it
+    // If this is the active chat, display it (or replace optimistic)
     if (currentChat === partnerId) {
-        displayMessage(msg);
+        // Try to replace optimistic message first
+        if (msg.sender_id === userId) {
+            const replaced = replaceOptimisticMessage(msg);
+            if (!replaced) {
+                // If no optimistic found, display as new
+                displayMessage(msg);
+            }
+        } else {
+            displayMessage(msg);
+        }
     }
 }
 
@@ -405,12 +414,13 @@ async function loadMessages(chatUserId) {
     }
 }
 
-function displayMessage(msg) {
+function displayMessage(msg, isOptimistic = false) {
     const container = document.getElementById('messages');
     const isOutgoing = msg.sender_id === userId;
     
     const div = document.createElement('div');
-    div.className = `message ${isOutgoing ? 'outgoing' : 'incoming'}`;
+    div.className = `message outgoing ${isOptimistic ? 'optimistic' : ''}`;
+    div.dataset.messageId = msg.id;
     
     const text = decodePayload(msg.payload);
     const time = formatMessageTime(new Date(msg.created_at));
@@ -422,6 +432,24 @@ function displayMessage(msg) {
     
     container.appendChild(div);
     scrollToBottom();
+}
+
+function replaceOptimisticMessage(serverMsg) {
+    const container = document.getElementById('messages');
+    const text = decodePayload(serverMsg.payload);
+    
+    // Find optimistic message by content (sent by current user)
+    const optimisticMsgs = container.querySelectorAll('.message.optimistic');
+    for (const msgDiv of optimisticMsgs) {
+        const msgText = msgDiv.querySelector('.message-text').textContent;
+        if (msgText === text && serverMsg.sender_id === userId) {
+            // Replace with confirmed message
+            msgDiv.classList.remove('optimistic');
+            msgDiv.dataset.messageId = serverMsg.id;
+            return true;
+        }
+    }
+    return false;
 }
 
 function decodePayload(payload) {
@@ -461,7 +489,7 @@ function sendMessage() {
         created_at: new Date().toISOString()
     };
     
-    displayMessage(optimisticMsg);
+    displayMessage(optimisticMsg, true);
     
     // Update chat list
     updateChatFromMessage(currentChat, optimisticMsg);
