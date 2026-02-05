@@ -617,24 +617,40 @@ function setupInputResize() {
     });
 }
 
-// Enter key listener for new chat username input
-document.getElementById('new-chat-username')?.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-        createChatByUsername();
+// Setup all event listeners when DOM is ready
+function setupEventListeners() {
+    // Enter key listener for new chat username input
+    const newChatInput = document.getElementById('new-chat-username');
+    if (newChatInput) {
+        newChatInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                createChatByUsername();
+            }
+        });
     }
-});
+    
+    // Close modal on outside click
+    const modal = document.getElementById('new-chat-modal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeNewChatModal();
+            }
+        });
+    }
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        // Escape to close modal
+        if (e.key === 'Escape') {
+            closeNewChatModal();
+        }
+    });
+}
 
-// Close modal on outside click
-document.getElementById('new-chat-modal')?.addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeNewChatModal();
-    }
-});
-
-// Keyboard shortcuts
-document.addEventListener('keydown', function(e) {
-    // Escape to close modal
-    if (e.key === 'Escape') {
-        closeNewChatModal();
-    }
-});
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupEventListeners);
+} else {
+    setupEventListeners();
+}

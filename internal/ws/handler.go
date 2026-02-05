@@ -147,7 +147,7 @@ func (c *Client) writePump() {
 				ID         uuid.UUID `json:"id"`
 				SenderID   uuid.UUID `json:"sender_id"`
 				ReceiverID uuid.UUID `json:"receiver_id"`
-				Payload    []byte    `json:"payload"`
+				Payload    string    `json:"payload"`
 				CreatedAt  string    `json:"created_at"`
 			}{
 				ID:         msg.ID,

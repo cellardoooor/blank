@@ -47,8 +47,6 @@ func (h *Handler) Router() *mux.Router {
 	api.HandleFunc("/messages", h.sendMessage).Methods("POST")
 	api.HandleFunc("/messages/{user_id}", h.getMessages).Methods("GET")
 
-	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/")))
-
 	return r
 }
 

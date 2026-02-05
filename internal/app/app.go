@@ -67,8 +67,12 @@ func (a *App) Init(ctx context.Context) error {
 	httpHandler := httphandlers.NewHandler(authService, userService, messageService, a.config.CORSAllowed)
 	router := httpHandler.Router()
 
+	// Register WebSocket handler BEFORE static file catch-all
 	wsHandler := ws.NewHandler(a.hub, authService, messageService)
 	router.Handle("/ws", wsHandler)
+
+	// Static files handler - must be registered last (catch-all)
+	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/")))
 
 	a.router = router
 
