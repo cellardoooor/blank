@@ -73,7 +73,7 @@ resource "yandex_compute_instance_group" "main" {
   }
 
   deploy_policy {
-    max_unavailable  = 1
+    max_unavailable  = 0
     max_expansion    = 1
     max_creating     = 2
     startup_duration = 180
