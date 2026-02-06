@@ -2,9 +2,9 @@
 resource "yandex_cm_certificate" "main" {
   name        = "${var.alb_name}-cert"
   description = "Let's Encrypt certificate for ${var.domain}"
+  domains     = [var.domain]
 
   managed {
-    domains        = [var.domain]
     challenge_type = "DNS_CNAME"
   }
 }
