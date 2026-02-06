@@ -227,7 +227,7 @@ jobs:
           TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
           TF_VAR_yc_cloud_id: ${{ vars.YC_CLOUD_ID }}
           TF_VAR_yc_folder_id: ${{ vars.YC_FOLDER_ID }}
-          TF_VAR_docker_image: "${{ needs.build.outputs.image_sha }}"
+          TF_VAR_docker_image: "${{ needs.build.outputs.image_sha != '' && needs.build.outputs.image_sha || format('{0}/{1}:latest', env.REGISTRY, env.IMAGE_NAME) }}"
           TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
           TF_VAR_http_addr: ${{ vars.HTTP_ADDR }}
