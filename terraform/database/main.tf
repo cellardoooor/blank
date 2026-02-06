@@ -19,19 +19,6 @@ resource "yandex_mdb_postgresql_cluster" "main" {
     }
   }
 
-  database {
-    name  = var.db_name
-    owner = var.db_user
-  }
-
-  user {
-    name     = var.db_user
-    password = var.db_password
-    permission {
-      database_name = var.db_name
-    }
-  }
-
   host {
     zone             = var.zone
     subnet_id        = var.subnet_id
@@ -39,4 +26,21 @@ resource "yandex_mdb_postgresql_cluster" "main" {
   }
 
   security_group_ids = [var.security_group_id]
+}
+
+# Database (separate resource - recommended)
+resource "yandex_mdb_postgresql_database" "main" {
+  cluster_id = yandex_mdb_postgresql_cluster.main.id
+  name       = var.db_name
+  owner      = var.db_user
+}
+
+# User (separate resource - recommended)
+resource "yandex_mdb_postgresql_user" "main" {
+  cluster_id = yandex_mdb_postgresql_cluster.main.id
+  name       = var.db_user
+  password   = var.db_password
+  permission {
+    database_name = var.db_name
+  }
 }
