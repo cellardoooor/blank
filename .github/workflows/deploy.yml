@@ -141,6 +141,17 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: terraform get -update
 
+      # TEMPORARY: Remove database state to recreate cluster (cluster was deleted manually)
+      - name: Remove database from state (temporary)
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          echo "Removing database resources from state to recreate them..."
+          terraform state rm module.database.yandex_mdb_postgresql_cluster.main 2>/dev/null || true
+          terraform state rm module.database.yandex_mdb_postgresql_database.main 2>/dev/null || true
+          terraform state rm module.database.yandex_mdb_postgresql_user.main 2>/dev/null || true
+          echo "Database state removed (if existed)"
+        continue-on-error: true
+
       - name: Terraform Plan
         working-directory: ${{ env.TF_ROOT }}
         env:
