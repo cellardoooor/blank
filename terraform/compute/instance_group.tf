@@ -53,7 +53,7 @@ resource "yandex_compute_instance_group" "main" {
     metadata = {
       user-data = local.cloud_init
       # Version triggers rolling update when docker_image changes
-      version = md5(var.docker_image)
+      version = md5("${var.docker_image}-${timestamp()}")
     }
   }
 
