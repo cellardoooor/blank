@@ -1,8 +1,7 @@
 # Certificate Manager - Let's Encrypt certificate
 resource "yandex_cm_certificate" "main" {
-  name        = "${var.alb_name}-cert"
-  description = "Let's Encrypt certificate for ${var.domain}"
-  domains     = [var.domain]
+  name    = "${var.alb_name}-cert"
+  domains = [var.domain]
 
   managed {
     challenge_type = "DNS_CNAME"
@@ -69,6 +68,7 @@ resource "yandex_alb_load_balancer" "main" {
     }
   }
 
+  # HTTPS listener
   listener {
     name = "https-listener"
     endpoint {
@@ -80,8 +80,6 @@ resource "yandex_alb_load_balancer" "main" {
     tls {
       default_handler {
         certificate_ids = [yandex_cm_certificate.main.id]
-      }
-      handler {
         http_handler {
           http_router_id = yandex_alb_http_router.main.id
         }
@@ -89,6 +87,7 @@ resource "yandex_alb_load_balancer" "main" {
     }
   }
 
+  # HTTP listener (редирект на HTTPS)
   listener {
     name = "http-redirect"
     endpoint {
