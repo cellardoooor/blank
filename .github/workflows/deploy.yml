@@ -3,7 +3,6 @@ name: Deploy
 on:
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
 
 env:
@@ -15,8 +14,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      image_tag: ${{ steps.meta.outputs.tags }}
-      image_sha: ${{ steps.sha.outputs.sha_tag }}
       image_sha_full: ${{ steps.sha.outputs.sha_tag_full }}
     steps:
       - name: Checkout
@@ -37,10 +34,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-,suffix=,format=short
-            latest
 
       - name: Get SHA tag
         id: sha
@@ -48,7 +42,6 @@ jobs:
           SHA_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep -o 'sha-[a-f0-9]\+' | head -1)
           echo "sha_tag=$SHA_TAG" >> $GITHUB_OUTPUT
           echo "sha_tag_full=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$SHA_TAG" >> $GITHUB_OUTPUT
-          echo "Using SHA tag: $SHA_TAG"
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -56,16 +49,12 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
 
-  infrastructure:
+  deploy:
     needs: build
     runs-on: ubuntu-latest
-    outputs:
-      db_host: ${{ steps.tf.outputs.db_host }}
-      alb_ip: ${{ steps.tf.outputs.alb_ip }}
-      certificate_status: ${{ steps.tf.outputs.certificate_status }}
-      instance_count: ${{ steps.tf.outputs.instance_count }}
+    environment: production
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,20 +63,6 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.0"
-
-      - name: Setup Terraform CLI config
-        run: |
-          cat > ~/.terraformrc << 'EOF'
-          provider_installation {
-            network_mirror {
-              url = "https://terraform-mirror.yandexcloud.net/"
-              include = ["registry.terraform.io/*/*"]
-            }
-            direct {
-              exclude = ["registry.terraform.io/*/*"]
-            }
-          }
-          EOF
 
       - name: Terraform Init
         working-directory: ${{ env.TF_ROOT }}
@@ -104,31 +79,7 @@ jobs:
             -backend-config="skip_metadata_api_check=true" \
             -backend-config="skip_requesting_account_id=true"
 
-      - name: Terraform Plan
-        working-directory: ${{ env.TF_ROOT }}
-        env:
-          TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
-          TF_VAR_yc_cloud_id: ${{ vars.YC_CLOUD_ID }}
-          TF_VAR_yc_folder_id: ${{ vars.YC_FOLDER_ID }}
-          TF_VAR_docker_image: "${{ needs.build.outputs.image_sha_full }}"
-          TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
-          TF_VAR_http_addr: ${{ vars.HTTP_ADDR }}
-          TF_VAR_jwt_duration: ${{ vars.JWT_DURATION }}
-          TF_VAR_db_user: ${{ vars.DB_USER }}
-          TF_VAR_db_name: ${{ vars.DB_NAME }}
-          TF_VAR_domain: ${{ vars.DOMAIN }}
-          TF_VAR_default_user: ${{ secrets.DEFAULT_USER }}
-          TF_VAR_default_password: ${{ secrets.DEFAULT_PASSWORD }}
-          TF_VAR_min_instances: ${{ vars.MIN_INSTANCES }}
-          TF_VAR_max_instances: ${{ vars.MAX_INSTANCES }}
-          TF_VAR_service_account_id: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
-        run: |
-          terraform plan -input=false
-
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
-        id: tf
         working-directory: ${{ env.TF_ROOT }}
         env:
           TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
@@ -141,6 +92,7 @@ jobs:
           TF_VAR_jwt_duration: ${{ vars.JWT_DURATION }}
           TF_VAR_db_user: ${{ vars.DB_USER }}
           TF_VAR_db_name: ${{ vars.DB_NAME }}
+          TF_VAR_db_sslmode: ${{ vars.DB_SSLMODE }}
           TF_VAR_domain: ${{ vars.DOMAIN }}
           TF_VAR_default_user: ${{ secrets.DEFAULT_USER }}
           TF_VAR_default_password: ${{ secrets.DEFAULT_PASSWORD }}
@@ -149,119 +101,19 @@ jobs:
           TF_VAR_service_account_id: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
         run: |
           terraform apply -auto-approve -input=false
-          echo "db_host=$(terraform output -raw database_host)" >> $GITHUB_OUTPUT
-          echo "alb_ip=$(terraform output -raw alb_ip_address)" >> $GITHUB_OUTPUT
-          echo "certificate_status=$(terraform output -raw certificate_status)" >> $GITHUB_OUTPUT
-          echo "instance_count=$(terraform output -raw instance_count)" >> $GITHUB_OUTPUT
 
-      - name: Infrastructure Summary
+      - name: Deployment Summary
         working-directory: ${{ env.TF_ROOT }}
         run: |
           echo "========================================="
-          echo "🏗️ Infrastructure Deployed!"
+          echo "✅ Deployment Complete!"
           echo "========================================="
           echo ""
-          echo "📍 Domain: https://${{ vars.DOMAIN }}"
+          echo "📍 URL: https://$(terraform output -raw domain)"
           echo "🌐 ALB IP: $(terraform output -raw alb_ip_address)"
           echo "🗄️  DB Host: $(terraform output -raw database_host)"
           echo "🔢 Instances: $(terraform output -raw instance_count)"
           echo "📜 Certificate: $(terraform output -raw certificate_status)"
-          echo ""
-          echo "⚠️  DNS Records Required:"
-          terraform output -json dns_challenge_records 2>/dev/null | jq -r '.[] | "  \(.dns_name) CNAME \(.dns_value)"' || echo "  Check with: terraform output dns_challenge_records"
-          echo ""
-          echo "========================================="
-
-  application:
-    needs: [infrastructure, build]
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Check DB_HOST
-        run: |
-          echo "DB_HOST from infrastructure: ${{ needs.infrastructure.outputs.db_host }}"
-          if [ -z "${{ needs.infrastructure.outputs.db_host }}" ]; then
-            echo "❌ ERROR: DB_HOST not set!"
-            exit 1
-          fi
-          echo "✓ DB_HOST is set"
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.9.0"
-
-      - name: Setup Terraform CLI config
-        run: |
-          cat > ~/.terraformrc << 'EOF'
-          provider_installation {
-            network_mirror {
-              url = "https://terraform-mirror.yandexcloud.net/"
-              include = ["registry.terraform.io/*/*"]
-            }
-            direct {
-              exclude = ["registry.terraform.io/*/*"]
-            }
-          }
-          EOF
-
-      - name: Terraform Init
-        working-directory: ${{ env.TF_ROOT }}
-        run: |
-          terraform init \
-            -backend-config="endpoints={s3=\"https://storage.yandexcloud.net\"}" \
-            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-            -backend-config="region=ru-central1" \
-            -backend-config="key=dev/terraform.tfstate" \
-            -backend-config="access_key=${{ secrets.YC_S3_ACCESS_KEY }}" \
-            -backend-config="secret_key=${{ secrets.YC_S3_SECRET_KEY }}" \
-            -backend-config="skip_region_validation=true" \
-            -backend-config="skip_credentials_validation=true" \
-            -backend-config="skip_metadata_api_check=true" \
-            -backend-config="skip_requesting_account_id=true"
-
-      - name: Deploy Application
-        working-directory: ${{ env.TF_ROOT }}
-        env:
-          TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
-          TF_VAR_yc_cloud_id: ${{ vars.YC_CLOUD_ID }}
-          TF_VAR_yc_folder_id: ${{ vars.YC_FOLDER_ID }}
-          TF_VAR_docker_image: "${{ needs.build.outputs.image_sha_full }}"
-          TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
-          TF_VAR_http_addr: ${{ vars.HTTP_ADDR }}
-          TF_VAR_jwt_duration: ${{ vars.JWT_DURATION }}
-          TF_VAR_db_host: ${{ needs.infrastructure.outputs.db_host }}
-          TF_VAR_db_port: "6432"
-          TF_VAR_db_user: ${{ vars.DB_USER }}
-          TF_VAR_db_name: ${{ vars.DB_NAME }}
-          TF_VAR_db_sslmode: "require"
-          TF_VAR_domain: ${{ vars.DOMAIN }}
-          TF_VAR_default_user: ${{ secrets.DEFAULT_USER }}
-          TF_VAR_default_password: ${{ secrets.DEFAULT_PASSWORD }}
-          TF_VAR_min_instances: ${{ vars.MIN_INSTANCES }}
-          TF_VAR_max_instances: ${{ vars.MAX_INSTANCES }}
-          TF_VAR_service_account_id: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
-        run: |
-          echo "🚀 Triggering rolling update with new Docker image..."
-          echo "Using Docker Image: ${{ needs.build.outputs.image_sha_full }}"
-          echo "Using DB_HOST: ${{ needs.infrastructure.outputs.db_host }}"
-          terraform apply -auto-approve -input=false -target=module.compute
-
-      - name: Deployment Summary
-        run: |
-          echo "========================================="
-          echo "🚀 Deployment Complete!"
-          echo "========================================="
-          echo ""
-          echo "📍 URL: https://${{ vars.DOMAIN }}"
-          echo "🗄️  DB Host: ${{ needs.infrastructure.outputs.db_host }}"
-          echo "🌐 ALB IP: ${{ needs.infrastructure.outputs.alb_ip }}"
-          echo "🔢 Instances: ${{ needs.infrastructure.outputs.instance_count }}"
-          echo "📜 Certificate: ${{ needs.infrastructure.outputs.certificate_status }}"
           echo "🐳 Image: ${{ needs.build.outputs.image_sha_full }}"
           echo ""
           echo "========================================="
