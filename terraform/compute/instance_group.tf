@@ -59,7 +59,7 @@ resource "yandex_compute_instance_group" "main" {
 
   scale_policy {
   auto_scale {
-    initial_size           = var.min_instances 
+    initial_size           = 2
     measurement_duration   = 60
     cpu_utilization_target = 75
     warmup_duration        = 120
