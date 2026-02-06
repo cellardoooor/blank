@@ -107,28 +107,25 @@ jobs:
           echo "instance_count=$(terraform output -raw instance_count)" >> $GITHUB_OUTPUT
 
       - name: Update GitHub Variables
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const dbHost = '${{ steps.outputs.outputs.db_host }}';
-            const albIp = '${{ steps.outputs.outputs.alb_ip }}';
-            const certStatus = '${{ steps.outputs.outputs.certificate_status }}';
-            
-            // Update DB_HOST variable
-            if (dbHost) {
-              await github.rest.actions.createOrUpdateRepoVariable({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                name: 'DB_HOST',
-                value: dbHost
-              });
-              console.log('✓ Updated DB_HOST variable');
-            }
-            
-            console.log('📊 Infrastructure Outputs:');
-            console.log(`  DB_HOST: ${dbHost}`);
-            console.log(`  ALB_IP: ${albIp}`);
-            console.log(`  Certificate: ${certStatus}`);
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DB_HOST: ${{ steps.outputs.outputs.db_host }}
+          ALB_IP: ${{ steps.outputs.outputs.alb_ip }}
+          CERT_STATUS: ${{ steps.outputs.outputs.certificate_status }}
+        run: |
+          echo "📊 Infrastructure Outputs:"
+          echo "  DB_HOST: $DB_HOST"
+          echo "  ALB_IP: $ALB_IP"
+          echo "  Certificate: $CERT_STATUS"
+          echo ""
+          
+          if [ -n "$DB_HOST" ]; then
+            echo "Updating DB_HOST variable..."
+            gh variable set DB_HOST --body "$DB_HOST" --repo ${{ github.repository }}
+            echo "✅ DB_HOST variable updated successfully"
+          else
+            echo "⚠️ DB_HOST is empty, skipping variable update"
+          fi
 
       - name: Output Summary
         working-directory: ${{ env.TF_ROOT }}
