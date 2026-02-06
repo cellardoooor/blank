@@ -58,17 +58,14 @@ resource "yandex_compute_instance_group" "main" {
   }
 
   scale_policy {
-    fixed_scale {
-      size = var.min_instances
-    }
     # Or use auto-scale:
-    # auto_scale {
-    #   min_zone_size = 1
-    #   max_size      = var.max_instances
-    #   measurement_duration = 60
-    #   cpu_utilization_target = 75
-    #   warmup_duration = 120
-    # }
+     auto_scale {
+      min_zone_size = 1
+      max_size      = var.max_instances
+      measurement_duration = 60
+      cpu_utilization_target = 75
+      warmup_duration = 120
+    }
   }
 
   allocation_policy {
