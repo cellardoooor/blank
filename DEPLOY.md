@@ -273,23 +273,50 @@ terraform plan
 terraform apply
 ```
 
-## CI/CD Pipeline
+## CI/CD Pipeline (Two-Stage)
 
-При push в `main`:
+Используется двухэтапный подход для разделения инфраструктуры и приложения:
 
-1. **Changes job**:
-   - Анализирует изменённые файлы
-   - Определяет, нужен ли build и deploy
-   
-2. **Build job**:
-   - Собирает Docker образ если изменился код
-   - Пушит в Docker Hub
+### Этап 1: Infrastructure Deploy (`.github/workflows/infrastructure.yml`)
 
-3. **Deploy job**:
-   - Инициализирует Terraform с S3 backend
-   - Выполняет rolling update через Instance Group
-   - **Zero-downtime**: новые VM создаются, старые удаляются после health check
-   - Выводит домен и количество инстансов
+**Запускается при изменении:**
+- `terraform/**`
+- `.github/workflows/infrastructure.yml`
+- Вручную (`workflow_dispatch`)
+
+**Что делает:**
+1. Создаёт/обновляет инфраструктуру через Terraform
+2. Получает outputs (DB_HOST, ALB_IP, etc.)
+3. **Обновляет GitHub Variables** (DB_HOST и другие)
+4. Выводит DNS-записи для Let's Encrypt
+
+**Важно:** Запустить сначала! Без этого приложение не получит DB_HOST.
+
+### Этап 2: Application Deploy (`.github/workflows/application.yml`)
+
+**Запускается при изменении:**
+- Кода приложения (не terraform!)
+- После успешного Infrastructure Deploy
+- Вручную (`workflow_dispatch`)
+
+**Что делает:**
+1. Проверяет что DB_HOST установлен
+2. Собирает Docker образ
+3. Триггерит rolling update Instance Group
+4. Использует DB_HOST из GitHub Variables
+
+### Порядок первого деплоя
+
+```bash
+# 1. Сначала инфраструктура (создаёт PostgreSQL, ALB, получает DB_HOST)
+.github/workflows/infrastructure.yml
+
+# 2. Ждём создания DNS записи для Let's Encrypt
+#    (выводится в логах infrastructure pipeline)
+
+# 3. Затем приложение (использует DB_HOST из Variables)
+.github/workflows/application.yml
+```
 
 ### Как работает rolling update
 
@@ -325,7 +352,8 @@ State хранится в **Yandex Object Storage (S3)**:
 │   ├── network/         # VPC, subnets, security groups
 │   └── envs/dev/        # Dev окружение
 └── .github/workflows/    # CI/CD
-    └── deploy.yml        # Build + Deploy pipeline
+    ├── infrastructure.yml  # Stage 1: Infrastructure (Terraform)
+    └── application.yml     # Stage 2: Application (Build & Deploy)
 ```
 
 ## Переменные окружения приложения

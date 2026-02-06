@@ -833,35 +833,48 @@ Egress:
 | domain | string | - | Domain name for ALB |
 | cert_type | string | `letsencrypt` | Certificate type (letsencrypt/imported) |
 
-## 11. CI/CD Pipeline
+## 11. CI/CD Pipeline (Two-Stage)
 
-### 11.1 GitHub Actions Workflow
-**Triggers**: Push в main, теги v*
+### 11.1 Architecture
+Two separate pipelines for infrastructure and application:
+
+**Stage 1: Infrastructure Pipeline** (`.github/workflows/infrastructure.yml`)
+**Triggers**: Push в `terraform/**`, manual
 **Jobs**:
-1. **Changes**:
-   - Checkout с fetch-depth=0 для анализа истории
-   - Анализ изменённых файлов с помощью git diff
-   - Определение необходимости build (код приложения) и deploy (код + инфраструктура)
+1. **Terraform Init**: Initialize with S3 backend
+2. **Terraform Plan**: Preview infrastructure changes
+3. **Terraform Apply**: Deploy/Update infrastructure
+4. **Save Outputs**: Extract DB_HOST, ALB_IP, certificate status
+5. **Update GitHub Variables**: Save DB_HOST to repository variables
 
-2. **Build**:
-   - Needs: changes
-   - Условие: `build == 'true'`
-   - Setup Docker Buildx
-   - Login to Docker Hub
-   - Build и push образа с тегами: semver, latest, sha
-   - Если build не нужен, job запускается но пропускает сборку
+**Stage 2: Application Pipeline** (`.github/workflows/application.yml`)
+**Triggers**: Push в код (не terraform), after infrastructure success
+**Jobs**:
+1. **Build**: Docker image build and push
+2. **Deploy**: Trigger Instance Group rolling update
 
-3. **Deploy**:
-   - Needs: [changes, build]
-   - Условие: `deploy == 'true'`
-   - Checkout code
-   - Setup Terraform с YC mirror
-   - Terraform init с S3 backend
-   - Terraform plan
-   - Terraform apply (rolling update via Instance Group)
-   - ALB automatically registers new VMs
-   - Zero-downtime deployment
-   - Output ALB IP and domain
+### 11.2 Execution Order
+**First deployment:**
+1. Run `infrastructure.yml` - creates PostgreSQL, ALB, saves DB_HOST
+2. Wait for DNS propagation and certificate issuance
+3. Run `application.yml` - deploys app with correct DB_HOST
+
+**Subsequent deployments:**
+- Application code changes → `application.yml` only
+- Infrastructure changes → `infrastructure.yml` → triggers `application.yml`
+
+### 11.3 GitHub Actions Workflows
+**Infrastructure Workflow**:
+- Creates all cloud resources via Terraform
+- Outputs: DB_HOST, ALB_IP, certificate_status
+- Updates GitHub Variable: `DB_HOST`
+- Outputs DNS challenge records for Let's Encrypt
+
+**Application Workflow**:
+- Verifies DB_HOST variable is set
+- Builds Docker image
+- Triggers rolling update on Instance Group
+- Uses DB_HOST from GitHub Variables
 
 ### 11.2 Required Secrets
 - `DOCKERHUB_USERNAME` - Docker Hub username
@@ -875,11 +888,10 @@ Egress:
 - `DEFAULT_USER` - Default username for seeding
 - `DEFAULT_PASSWORD` - Default password for seeding
 
-### 11.3 Required Variables
+### 11.4 Required Variables (Manual)
 - `YC_CLOUD_ID` - Yandex Cloud ID
 - `YC_FOLDER_ID` - Yandex Folder ID
 - `DOMAIN` - Domain name for application (e.g., messenger.example.com)
-- `DB_HOST` - Managed PostgreSQL host (from Yandex Console)
 - `DB_PORT` - PostgreSQL port (default: 6432)
 - `DB_USER` - PostgreSQL username
 - `DB_NAME` - PostgreSQL database name
@@ -888,6 +900,9 @@ Egress:
 - `JWT_DURATION` - Token lifetime (default: 24h)
 - `MIN_INSTANCES` - Minimum VM count (default: 2)
 - `MAX_INSTANCES` - Maximum VM count (default: 4)
+
+### 11.5 Auto-Generated Variables
+- `DB_HOST` - Managed PostgreSQL host (auto-set by Infrastructure pipeline)
 
 ## 12. Dependencies
 

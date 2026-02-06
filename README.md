@@ -142,7 +142,17 @@ terraform output certificate_status
 
 ### CI/CD
 
-GitHub Actions automatically builds and pushes Docker image on push to `main`.
+Two-stage deployment pipeline:
+
+**Stage 1: Infrastructure** (`.github/workflows/infrastructure.yml`)
+- Deploys Terraform infrastructure (ALB, PostgreSQL, Instance Group)
+- Outputs DB_HOST and saves it to GitHub Variables
+- Run this first!
+
+**Stage 2: Application** (`.github/workflows/application.yml`)
+- Builds and pushes Docker image
+- Triggers rolling update on Instance Group
+- Uses DB_HOST from GitHub Variables
 
 **Required Secrets:**
 - `DOCKERHUB_USERNAME` - your Docker Hub username
@@ -162,6 +172,9 @@ GitHub Actions automatically builds and pushes Docker image on push to `main`.
 - `DB_NAME` - Database name
 - `MIN_INSTANCES` - Minimum VM count (default: 2)
 - `MAX_INSTANCES` - Maximum VM count (default: 4)
+
+**Auto-generated Variables:**
+- `DB_HOST` - Managed PostgreSQL host (set by Infrastructure pipeline)
 
 ## Environment Variables
 
