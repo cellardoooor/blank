@@ -12,7 +12,54 @@ env:
   TF_ROOT: terraform/envs/dev
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+      image_sha: ${{ steps.sha.outputs.sha_tag }}
+      image_sha_full: ${{ steps.sha.outputs.sha_tag_full }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=,suffix=,format=short
+            latest
+
+      - name: Get SHA tag
+        id: sha
+        run: |
+          SHA_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep -o 'sha-[a-f0-9]\+' | head -1)
+          echo "sha_tag=$SHA_TAG" >> $GITHUB_OUTPUT
+          echo "sha_tag_full=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$SHA_TAG" >> $GITHUB_OUTPUT
+          echo "Using SHA tag: $SHA_TAG"
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
   infrastructure:
+    needs: build
     runs-on: ubuntu-latest
     outputs:
       db_host: ${{ steps.tf.outputs.db_host }}
@@ -63,7 +110,7 @@ jobs:
           TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
           TF_VAR_yc_cloud_id: ${{ vars.YC_CLOUD_ID }}
           TF_VAR_yc_folder_id: ${{ vars.YC_FOLDER_ID }}
-          TF_VAR_docker_image: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          TF_VAR_docker_image: "${{ needs.build.outputs.image_sha_full }}"
           TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
           TF_VAR_http_addr: ${{ vars.HTTP_ADDR }}
@@ -87,7 +134,7 @@ jobs:
           TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
           TF_VAR_yc_cloud_id: ${{ vars.YC_CLOUD_ID }}
           TF_VAR_yc_folder_id: ${{ vars.YC_FOLDER_ID }}
-          TF_VAR_docker_image: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          TF_VAR_docker_image: "${{ needs.build.outputs.image_sha_full }}"
           TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
           TF_VAR_http_addr: ${{ vars.HTTP_ADDR }}
@@ -124,51 +171,6 @@ jobs:
           terraform output -json dns_challenge_records 2>/dev/null | jq -r '.[] | "  \(.dns_name) CNAME \(.dns_value)"' || echo "  Check with: terraform output dns_challenge_records"
           echo ""
           echo "========================================="
-
-  build:
-    needs: infrastructure
-    runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ steps.meta.outputs.tags }}
-      image_sha: ${{ steps.sha.outputs.sha_tag }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix=,suffix=,format=short
-            latest
-
-      - name: Get SHA tag
-        id: sha
-        run: |
-          SHA_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep -o 'sha-[a-f0-9]\+' | head -1)
-          echo "sha_tag=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${SHA_TAG}" >> $GITHUB_OUTPUT
-          echo "Using SHA tag: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${SHA_TAG}"
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
 
   application:
     needs: [infrastructure, build]
@@ -227,7 +229,7 @@ jobs:
           TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
           TF_VAR_yc_cloud_id: ${{ vars.YC_CLOUD_ID }}
           TF_VAR_yc_folder_id: ${{ vars.YC_FOLDER_ID }}
-          TF_VAR_docker_image: "${{ needs.build.outputs.image_sha != '' && needs.build.outputs.image_sha || format('{0}/{1}:latest', env.REGISTRY, env.IMAGE_NAME) }}"
+          TF_VAR_docker_image: "${{ needs.build.outputs.image_sha_full }}"
           TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
           TF_VAR_http_addr: ${{ vars.HTTP_ADDR }}
@@ -245,7 +247,7 @@ jobs:
           TF_VAR_service_account_id: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
         run: |
           echo "🚀 Triggering rolling update with new Docker image..."
-          echo "Using Docker Image: ${{ needs.build.outputs.image_sha }}"
+          echo "Using Docker Image: ${{ needs.build.outputs.image_sha_full }}"
           echo "Using DB_HOST: ${{ needs.infrastructure.outputs.db_host }}"
           terraform apply -auto-approve -input=false -target=module.compute
 
@@ -260,6 +262,6 @@ jobs:
           echo "🌐 ALB IP: ${{ needs.infrastructure.outputs.alb_ip }}"
           echo "🔢 Instances: ${{ needs.infrastructure.outputs.instance_count }}"
           echo "📜 Certificate: ${{ needs.infrastructure.outputs.certificate_status }}"
-          echo "🐳 Image: ${{ needs.build.outputs.image_sha }}"
+          echo "🐳 Image: ${{ needs.build.outputs.image_sha_full }}"
           echo ""
           echo "========================================="
