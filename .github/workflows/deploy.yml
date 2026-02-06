@@ -39,7 +39,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix=,suffix=,format=short
+            type=sha,prefix=sha-,suffix=,format=short
             latest
 
       - name: Get SHA tag
