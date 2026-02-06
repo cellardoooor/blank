@@ -30,7 +30,7 @@ output "certificate_status" {
 
 output "dns_challenge_records" {
   description = "DNS records required for Let's Encrypt domain validation"
-  value       = [
+  value = [
     for challenge in yandex_cm_certificate.main.challenges : {
       domain = challenge.domain
       type   = challenge.dns_challenge[0].type
@@ -38,6 +38,4 @@ output "dns_challenge_records" {
       value  = challenge.dns_challenge[0].value
     }
   ]
-}
-  ] : []
 }
