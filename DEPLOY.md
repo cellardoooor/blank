@@ -162,15 +162,76 @@ yc resource-manager folder add-access-binding <YC_FOLDER_ID> \
 echo $SA_ID
 ```
 
-### 4. Настройка домена
+### 4. Настройка домена и SSL-сертификата
+
+#### 4.1 Регистрация домена
 
 1. Зарегистрируй домен (например, messenger.example.com)
-2. В DNS настрой A-запись:
+2. Убедись, что у тебя есть доступ к DNS-записям домена
+
+#### 4.2 Первый деплой (без SSL)
+
+1. Запусти `terraform apply` - инфраструктура создастся
+2. Получи ALB IP адрес:
+   ```bash
+   terraform output alb_ip_address
    ```
-   messenger.example.com.  A  <ALB_IP>
+
+#### 4.3 Настройка DNS
+
+**Обязательные DNS-записи:**
+
+```
+; Основная A-запись
+messenger.example.com.    A    <ALB_IP>
+
+; CNAME для www
+www.messenger.example.com.    CNAME    messenger.example.com.
+```
+
+**Записи для Let's Encrypt (выпускаются автоматически):**
+
+После первого деплоя Terraform выведет DNS-записи для подтверждения домена:
+
+```bash
+terraform output dns_challenge_records
+```
+
+Пример вывода:
+```
+[
+  {
+    "domain" = "messenger.example.com"
+    "type" = "CNAME"
+    "name" = "_acme-challenge.messenger.example.com"
+    "value" = "abc123.challenges.cm.yandexcloud.net"
+  }
+]
+```
+
+**Добавь эту CNAME-запись в DNS:**
+```
+_acme-challenge.messenger.example.com.    CNAME    abc123.challenges.cm.yandexcloud.net
+```
+
+#### 4.4 Подтверждение сертификата
+
+1. Добавь CNAME-запись в DNS (как показано выше)
+2. Подожди 5-15 минут для распространения DNS
+3. Проверь статус сертификата:
+   ```bash
+   terraform output certificate_status
    ```
-3. ALB IP будет получен после первого деплоя
-4. Let's Encrypt автоматически выпустит сертификат
+   - `PENDING_VALIDATION` - ждём подтверждения DNS
+   - `VALIDATING` - проверяем DNS-запись
+   - `ISSUED` - сертификат готов! ✅
+
+4. Если статус `ISSUED`, сайт доступен по HTTPS:
+   ```
+   https://messenger.example.com
+   ```
+
+**Примечание:** Let's Encrypt сертификат автоматически обновляется каждые 90 дней.
 
 ## Локальная разработка
 

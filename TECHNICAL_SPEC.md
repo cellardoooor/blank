@@ -721,6 +721,23 @@ volumes:
 - **Timeout**: 10s connection, 60s request
 - **Domain**: Configurable via `DOMAIN` variable
 
+#### 6. SSL/TLS Certificates (Let's Encrypt)
+- **Service**: Yandex Certificate Manager with Let's Encrypt
+- **Type**: Managed certificate (auto-renewal)
+- **Challenge**: DNS-01 (DNS_CNAME)
+- **Validation**: Requires CNAME DNS record for domain ownership
+- **Auto-renewal**: Every 90 days automatically
+- **Status Tracking**: Terraform outputs show certificate status
+
+**Certificate Lifecycle:**
+1. Terraform creates `yandex_cm_certificate` resource
+2. Certificate Manager generates DNS challenge
+3. User adds CNAME record to DNS (provided in terraform output)
+4. Let's Encrypt validates domain ownership via DNS
+5. Certificate status changes to `ISSUED`
+6. ALB uses certificate for HTTPS termination
+7. Auto-renewal before expiration
+
 #### 3. Compute Instance Group
 - **Image**: Container-Optimized Image with Docker
 - **Type**: standard-v3 (2 cores, 4GB RAM, 20GB SSD)
@@ -1153,6 +1170,16 @@ When modifying this project, maintain:
 **Maintainer**: AI Assistant
 
 ## Changelog
+
+### Version 2.1 (2026-02-05) - Automatic SSL Certificates
+- **Let's Encrypt Integration**: Automatic SSL certificate provisioning
+  - **Yandex Certificate Manager**: Managed Let's Encrypt certificates
+  - **DNS Challenge**: DNS-01 validation via CNAME records
+  - **Auto-renewal**: Certificates automatically renew every 90 days
+  - **Terraform Integration**: Certificate creation and validation via Terraform
+  - **CI/CD Updates**: Pipeline outputs DNS challenge records for easy configuration
+- **Documentation**: Updated DEPLOY.md with detailed DNS setup instructions
+- **Outputs**: New terraform outputs for certificate status and DNS records
 
 ### Version 2.0 (2026-02-05) - Scalable Architecture
 - **Infrastructure Overhaul**: Moved from single VM to scalable multi-tier architecture

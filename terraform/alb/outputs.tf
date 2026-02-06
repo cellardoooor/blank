@@ -17,3 +17,25 @@ output "backend_group_id" {
   description = "Backend Group ID"
   value       = yandex_alb_backend_group.main.id
 }
+
+output "certificate_id" {
+  description = "Certificate ID"
+  value       = yandex_cm_certificate.main.id
+}
+
+output "certificate_status" {
+  description = "Certificate status (PENDING_VALIDATION, VALIDATING, ISSUED, etc.)"
+  value       = yandex_cm_certificate.main.status
+}
+
+output "dns_challenge_records" {
+  description = "DNS records required for Let's Encrypt domain validation"
+  value = yandex_cm_certificate.main.managed[0].challenge_count > 0 ? [
+    for challenge in yandex_cm_certificate.main.challenges : {
+      domain = challenge.domain
+      type   = challenge.dns_challenge[0].type
+      name   = challenge.dns_challenge[0].name
+      value  = challenge.dns_challenge[0].value
+    }
+  ] : []
+}

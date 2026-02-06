@@ -65,9 +65,10 @@ Internet
     v
 ┌─────────────────────────────────────┐
 │  Yandex Application Load Balancer   │
-│  • TLS Termination                  │
+│  • TLS Termination (Let's Encrypt)  │
 │  • HTTP → HTTPS redirect            │
 │  • Health checks                    │
+│  • Auto-renewal (90 days)           │
 └──────────────┬──────────────────────┘
                | HTTP (8080)
                v
@@ -126,7 +127,17 @@ terraform init
 terraform plan
 terraform apply
 
-# Output will show ALB IP and domain
+# Get ALB IP and DNS challenge records
+terraform output alb_ip_address
+terraform output dns_challenge_records
+
+# Add DNS records (see DEPLOY.md for details)
+# 1. A-record for your domain → ALB IP
+# 2. CNAME for Let's Encrypt validation
+
+# Check certificate status
+terraform output certificate_status
+# Wait for ISSUED status, then access https://<your-domain>
 ```
 
 ### CI/CD
@@ -194,8 +205,9 @@ yc iam create-token
 - **Stateless**: JWT tokens only, no sessions
 - **Highly Available**: Min 2 VMs with auto-healing
 - **Scalable**: Instance Group with auto-scaling support
-- **Secure**: HTTPS, SSL for database, restrictive security groups
+- **Secure**: HTTPS with Let's Encrypt, SSL for database, restrictive security groups
 - **Zero-downtime**: Rolling updates via Instance Group
+- **Auto SSL**: Let's Encrypt certificates with automatic renewal (90 days)
 - **Frontend**: Custom Chicago font applied to all UI elements
 
 ## License

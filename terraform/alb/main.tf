@@ -1,3 +1,14 @@
+# Certificate Manager - Let's Encrypt certificate
+resource "yandex_cm_certificate" "main" {
+  name        = "${var.alb_name}-cert"
+  description = "Let's Encrypt certificate for ${var.domain}"
+
+  managed {
+    domains        = [var.domain]
+    challenge_type = "DNS_CNAME"
+  }
+}
+
 # HTTP Router
 resource "yandex_alb_http_router" "main" {
   name = "${var.alb_name}-router"
@@ -68,7 +79,7 @@ resource "yandex_alb_load_balancer" "main" {
     }
     tls {
       default_handler {
-        certificate_ids = var.certificate_id != null ? [var.certificate_id] : []
+        certificate_ids = [yandex_cm_certificate.main.id]
       }
     }
     http {

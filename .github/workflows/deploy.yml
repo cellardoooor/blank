@@ -190,6 +190,18 @@ jobs:
       - name: Output Deployment Info
         working-directory: ${{ env.TF_ROOT }}
         run: |
-          echo "Deployed to: https://${{ vars.DOMAIN }}"
-          echo "ALB IP: $(terraform output -raw alb_ip_address)"
-          echo "Instance Count: $(terraform output -raw instance_count)"
+          echo "========================================="
+          echo "🚀 Deployment Complete!"
+          echo "========================================="
+          echo ""
+          echo "📍 Domain: https://${{ vars.DOMAIN }}"
+          echo "🌐 ALB IP: $(terraform output -raw alb_ip_address)"
+          echo "🔢 Instance Count: $(terraform output -raw instance_count)"
+          echo "📜 Certificate Status: $(terraform output -raw certificate_status)"
+          echo ""
+          echo "⚠️  IMPORTANT: If certificate status is PENDING_VALIDATION,"
+          echo "    add this DNS record to your domain:"
+          echo ""
+          terraform output -json dns_challenge_records | jq -r '.[] | "    \(.name)  CNAME  \(.value)"' 2>/dev/null || echo "    (Run 'terraform output dns_challenge_records' to see DNS records)"
+          echo ""
+          echo "========================================="

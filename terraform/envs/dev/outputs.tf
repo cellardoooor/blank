@@ -48,6 +48,21 @@ output "domain" {
   value       = var.domain
 }
 
+output "certificate_id" {
+  description = "Certificate ID"
+  value       = module.alb.certificate_id
+}
+
+output "certificate_status" {
+  description = "Certificate status"
+  value       = module.alb.certificate_status
+}
+
+output "dns_challenge_records" {
+  description = "DNS records required for Let's Encrypt domain validation"
+  value       = module.alb.dns_challenge_records
+}
+
 output "instance_group_id" {
   description = "Instance Group ID"
   value       = module.compute.instance_group_id
