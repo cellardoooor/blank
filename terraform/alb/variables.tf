@@ -19,10 +19,9 @@ variable "security_group_id" {
   type        = string
 }
 
-variable "instance_group_id" {
-  description = "Instance group ID to attach as backend (optional)"
+variable "target_group_id" {
+  description = "ALB target group ID created by instance group (required)"
   type        = string
-  default     = null
 }
 
 variable "enable_https" {

@@ -37,21 +37,7 @@ module "database" {
   zone              = var.zone
 }
 
-# ALB module - creates Application Load Balancer and target group
-module "alb" {
-  source = "../../alb"
-
-  alb_name          = "${var.environment}-messenger-alb"
-  domain            = var.domain
-  network_id        = module.network.vpc_id
-  public_subnet_id  = module.network.public_subnet_id
-  security_group_id = module.network.alb_security_group_id
-  zone              = var.zone
-  # Target group will be populated by Instance Group
-  # certificate_id = var.certificate_id
-}
-
-# Compute module - creates Instance Group
+# Compute module - creates Instance Group (ALB target group created automatically)
 module "compute" {
   source = "../../compute"
 
@@ -64,7 +50,6 @@ module "compute" {
   disk_size           = 20
   subnet_id           = module.network.app_subnet_id
   security_group_ids  = [module.network.app_security_group_id]
-  target_group_id     = module.alb.target_group_id
   service_account_id  = var.service_account_id
 
   docker_image   = var.docker_image
@@ -87,4 +72,18 @@ module "compute" {
 
   min_instances = var.min_instances
   max_instances = var.max_instances
+}
+
+# ALB module - creates Application Load Balancer
+module "alb" {
+  source = "../../alb"
+
+  alb_name          = "${var.environment}-messenger-alb"
+  domain            = var.domain
+  network_id        = module.network.vpc_id
+  public_subnet_id  = module.network.public_subnet_id
+  security_group_id = module.network.alb_security_group_id
+  zone              = var.zone
+  target_group_id   = module.compute.target_group_id
+  # certificate_id = var.certificate_id
 }

@@ -17,8 +17,3 @@ output "backend_group_id" {
   description = "Backend Group ID"
   value       = yandex_alb_backend_group.main.id
 }
-
-output "target_group_id" {
-  description = "Target Group ID"
-  value       = yandex_alb_target_group.main.id
-}

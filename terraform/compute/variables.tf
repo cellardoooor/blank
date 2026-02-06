@@ -134,11 +134,6 @@ variable "max_instances" {
   default     = 4
 }
 
-variable "target_group_id" {
-  description = "ALB target group ID to attach instances"
-  type        = string
-}
-
 variable "folder_id" {
   description = "Yandex Cloud folder ID"
   type        = string
