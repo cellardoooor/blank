@@ -81,10 +81,10 @@ resource "yandex_alb_load_balancer" "main" {
       default_handler {
         certificate_ids = [yandex_cm_certificate.main.id]
       }
-    }
-    http {
       handler {
-        http_router_id = yandex_alb_http_router.main.id
+        http_handler {
+          http_router_id = yandex_alb_http_router.main.id
+        }
       }
     }
   }
