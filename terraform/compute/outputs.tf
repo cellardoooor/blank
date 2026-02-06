@@ -9,8 +9,7 @@ output "instance_group_name" {
 }
 
 output "instance_count" {
-  description = "Current number of instances in the group"
-  value       = yandex_compute_instance_group.main.scale_policy[0].fixed_scale[0].size
+  value = yandex_compute_instance_group.main.scale_policy[0].auto_scale[0].initial_size
 }
 
 output "target_group_id" {
