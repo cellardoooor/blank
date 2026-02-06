@@ -28,19 +28,18 @@ resource "yandex_mdb_postgresql_cluster" "main" {
   security_group_ids = [var.security_group_id]
 }
 
-# Database (separate resource - recommended)
-resource "yandex_mdb_postgresql_database" "main" {
-  cluster_id = yandex_mdb_postgresql_cluster.main.id
-  name       = var.db_name
-  owner      = var.db_user
-}
-
-# User (separate resource - recommended)
+# User must be created before database
 resource "yandex_mdb_postgresql_user" "main" {
   cluster_id = yandex_mdb_postgresql_cluster.main.id
   name       = var.db_user
   password   = var.db_password
-  permission {
-    database_name = var.db_name
-  }
+}
+
+# Database depends on user (owner must exist first)
+resource "yandex_mdb_postgresql_database" "main" {
+  cluster_id = yandex_mdb_postgresql_cluster.main.id
+  name       = var.db_name
+  owner      = var.db_user
+
+  depends_on = [yandex_mdb_postgresql_user.main]
 }
