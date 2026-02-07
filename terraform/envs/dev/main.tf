@@ -50,6 +50,7 @@ module "golden_image" {
 }
 
 # Compute module - creates Instance Group using Golden Image
+# Instance Group automatically creates Target Group, which is then used by ALB
 module "compute" {
   source = "../../compute"
 
@@ -84,11 +85,12 @@ module "compute" {
   min_instances = var.min_instances
   max_instances = var.max_instances
 
-  # Wait for database, golden image, and ALB
-  depends_on = [module.database, module.golden_image, module.alb]
+  # Wait for database and golden image only (no ALB dependency)
+  depends_on = [module.database, module.golden_image]
 }
 
 # ALB module - creates Application Load Balancer
+# Uses Target Group created by Compute module
 module "alb" {
   source = "../../alb"
 
@@ -98,6 +100,9 @@ module "alb" {
   public_subnet_id  = module.network.public_subnet_id
   security_group_id = module.network.alb_security_group_id
   zone              = var.zone
+  target_group_id   = module.compute.target_group_id
+  
+  depends_on = [module.compute]
   target_group_id   = module.compute.target_group_id
 
   depends_on = [module.golden_image]

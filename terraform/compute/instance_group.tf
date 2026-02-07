@@ -74,9 +74,8 @@ resource "yandex_compute_instance_group" "main" {
 
   # Note: Health check managed by ALB only
 
-  # Create ALB target group automatically
+  # Automatically create ALB target group
   application_load_balancer {
-    target_group_id = var.target_group_id
   }
 
   lifecycle {

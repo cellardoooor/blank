@@ -44,12 +44,6 @@ variable "golden_image_id" {
   type        = string
 }
 
-variable "target_group_id" {
-  description = "Existing Target Group ID (optional). If not provided, IG will create its own"
-  type        = string
-  default     = null  # Делаем опциональным!
-}
-
 variable "jwt_secret" {
   description = "JWT signing secret"
   type        = string
