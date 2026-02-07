@@ -37,19 +37,24 @@ module "database" {
   zone              = var.zone
 }
 
-# ALB module - creates Application Load Balancer and Target Group
-module "alb" {
-  source = "../../alb"
+# Database module - creates Managed PostgreSQL
+module "database" {
+  source = "../../database"
 
-  alb_name          = "${var.environment}-messenger-alb"
-  domain            = var.domain
+  cluster_name      = "${var.environment}-messenger-postgres"
+  db_name           = var.db_name
+  db_user           = var.db_user
+  db_password       = var.db_password
   network_id        = module.network.vpc_id
-  public_subnet_id  = module.network.public_subnet_id
-  security_group_id = module.network.alb_security_group_id
+  subnet_id         = module.network.db_subnet_id
+  security_group_id = module.network.db_security_group_id
+  pg_version        = "15"
+  resource_preset   = "s2.micro"
+  disk_size         = 20
   zone              = var.zone
 }
 
-# Compute module - creates Instance Group attached to ALB Target Group
+# Compute module - creates Instance Group (creates its own target group)
 module "compute" {
   source = "../../compute"
 
@@ -63,9 +68,6 @@ module "compute" {
   subnet_id           = module.network.app_subnet_id
   security_group_ids  = [module.network.app_security_group_id]
   service_account_id  = var.service_account_id
-
-  # Attach to ALB Target Group
-  target_group_id = module.alb.target_group_id
 
   docker_image   = var.docker_image
   container_name = var.container_name
@@ -88,6 +90,21 @@ module "compute" {
   min_instances = var.min_instances
   max_instances = var.max_instances
 
-  # Wait for database and ALB to be fully created before starting compute instances
-  depends_on = [module.database, module.alb]
+  # Wait for database to be fully created before starting compute instances
+  depends_on = [module.database]
+}
+
+# ALB module - creates Application Load Balancer (uses compute's target group)
+module "alb" {
+  source = "../../alb"
+
+  alb_name          = "${var.environment}-messenger-alb"
+  domain            = var.domain
+  network_id        = module.network.vpc_id
+  public_subnet_id  = module.network.public_subnet_id
+  security_group_id = module.network.alb_security_group_id
+  zone              = var.zone
+  target_group_id   = module.compute.target_group_id
+
+  depends_on = [module.compute]
 }

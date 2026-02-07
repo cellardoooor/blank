@@ -148,8 +148,3 @@ variable "service_account_id" {
   description = "Service account ID for instance group"
   type        = string
 }
-
-variable "target_group_id" {
-  description = "ALB target group ID to attach instances"
-  type        = string
-}

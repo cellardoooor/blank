@@ -79,21 +79,12 @@ resource "yandex_compute_instance_group" "main" {
     startup_duration = 180
   }
 
-  health_check {
-    interval            = 15
-    timeout             = 10
-    unhealthy_threshold = 2
-    healthy_threshold   = 2
+  # Note: Health check is managed by ALB backend group only
+  # Do not add health_check block here - it conflicts with ALB health checks
 
-    http_options {
-      port = 8080
-      path = "/api/health"
-    }
-  }
-
-  # Attach to ALB target group
+  # Create ALB target group automatically (Yandex Cloud doesn't allow external target_group_id)
   application_load_balancer {
-    target_group_id = var.target_group_id
+    # Target group will be created automatically by Instance Group
   }
 
   lifecycle {
