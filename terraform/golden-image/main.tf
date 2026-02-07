@@ -65,7 +65,7 @@ resource "yandex_compute_image" "golden" {
   depends_on = [yandex_compute_instance.builder]
 
   lifecycle {
-    create_before_destroy = true
+    create_before_destroy = false
   }
 }
 
