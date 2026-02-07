@@ -1,5 +1,5 @@
-data "yandex_compute_image" "container_optimized" {
-  family = "container-optimized-image"
+data "yandex_compute_image" "ubuntu" {
+  family = "ubuntu-2204-lts"
 }
 
 locals {
@@ -37,7 +37,7 @@ resource "yandex_compute_instance_group" "main" {
 
     boot_disk {
       initialize_params {
-        image_id = data.yandex_compute_image.container_optimized.id
+        image_id = data.yandex_compute_image.ubuntu.id
         type     = "network-ssd"
         size     = var.disk_size
       }

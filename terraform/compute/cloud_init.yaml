@@ -54,6 +54,15 @@ write_files:
       echo "Application started at $(date)"
 
 runcmd:
+  # Install Docker
+  - curl -fsSL https://get.docker.com -o get-docker.sh
+  - sh get-docker.sh
+  - usermod -aG docker ubuntu
+  - systemctl start docker
+  - systemctl enable docker
+  # Wait for Docker to be ready
+  - sleep 10
+  # Setup and start application
   - mkdir -p /opt/messenger
   - chmod +x /opt/messenger/start.sh
   - /opt/messenger/start.sh
