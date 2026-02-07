@@ -41,7 +41,6 @@ resource "yandex_compute_instance" "builder" {
       docker_image   = var.docker_image
       startup_script = local.startup_script
     })
-    ssh-keys = "ubuntu:${file(var.ssh_public_key_path)}"
   }
 
   # Wait for cloud-init to complete

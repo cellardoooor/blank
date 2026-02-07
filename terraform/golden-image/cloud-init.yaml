@@ -45,7 +45,7 @@ write_files:
       
       # Create required directories
       mkdir -p /opt/messenger
-      
+  
       echo "=== Docker setup completed at $(date) ==="
       echo "Golden Image is ready for capture"
 
