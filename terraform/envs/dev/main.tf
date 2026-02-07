@@ -101,10 +101,6 @@ module "alb" {
   public_subnet_id  = module.network.public_subnet_id
   security_group_id = module.network.alb_security_group_id
   zone              = var.zone
-  target_group_id   = module.compute.target_group_id
-  
+  target_group_id   = module.compute.target_group_id 
   depends_on = [module.compute]
-  target_group_id   = module.compute.target_group_id
-
-  depends_on = [module.golden_image]
 }
