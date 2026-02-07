@@ -14,7 +14,7 @@ locals {
 
 # VM for building Golden Image
 resource "yandex_compute_instance" "builder" {
-  name        = "${var.image_name}-builder"
+  name        = "${var.image_name}-builder--${var.image_version}"
   platform_id = "standard-v3"
   zone        = var.zone
 
@@ -58,14 +58,14 @@ resource "yandex_compute_instance" "builder" {
 
 # Create Golden Image from the builder VM
 resource "yandex_compute_image" "golden" {
-  name = "${var.image_name}-${var.image_version}"
+  name = "${var.image_name}"
   source_disk = yandex_compute_instance.builder.boot_disk[0].disk_id
   min_disk_size = 20
 
   depends_on = [yandex_compute_instance.builder]
 
   lifecycle {
-    create_before_destroy = false
+    create_before_destroy = true
   }
 }
 
