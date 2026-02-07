@@ -4,135 +4,178 @@
 #   - /var/log/messenger-startup.log (application startup)
 # Access via: yc compute connect-to-serial-port <instance-id>
 
-package_update: true
-package_upgrade: true
-
-packages:
-  - apt-transport-https
-  - ca-certificates
-  - curl
-  - gnupg
-  - lsb-release
-  - git
+users:
+  - name: ubuntu
+    groups: [ sudo, docker ]
+    shell: /bin/bash
+    sudo: [ "ALL=(ALL) NOPASSWD:ALL" ]
 
 write_files:
-  - path: /opt/messenger/start.sh
-    permissions: '0755'
+  # Environment file - created separately to avoid heredoc YAML issues
+  - path: /opt/messenger/.env
     content: |
-      #!/bin/bash
-      exec > >(tee -a /var/log/messenger-startup.log) 2>&1
-      set -e
-      
-      echo "=== Starting messenger deployment at $(date) ==="
-      
-      # Decode environment variables
-      echo "Decoding environment variables..."
-      JWT_SECRET=$(echo '${jwt_secret_b64}' | base64 -d)
-      DB_PASSWORD=$(echo '${db_password_b64}' | base64 -d)
-      DEFAULT_USER=$(echo '${default_user_b64}' | base64 -d)
-      DEFAULT_PASSWORD=$(echo '${default_password_b64}' | base64 -d)
-      
-      # Create environment file
-      echo "Creating .env file..."
-      cat > /opt/messenger/.env << EOF
       HTTP_ADDR=${http_addr}
-      JWT_SECRET=$JWT_SECRET
+      JWT_SECRET=JWT_SECRET_PLACEHOLDER
       JWT_DURATION=${jwt_duration}
       DB_HOST=${db_host}
       DB_PORT=${db_port}
       DB_USER=${db_user}
-      DB_PASSWORD=$DB_PASSWORD
+      DB_PASSWORD=DB_PASSWORD_PLACEHOLDER
       DB_NAME=${db_name}
       DB_SSLMODE=${db_sslmode}
-      DEFAULT_USER=$DEFAULT_USER
-      DEFAULT_PASSWORD=$DEFAULT_PASSWORD
-      EOF
+      DEFAULT_USER=DEFAULT_USER_PLACEHOLDER
+      DEFAULT_PASSWORD=DEFAULT_PASSWORD_PLACEHOLDER
+    owner: root:root
+    permissions: '0600'
+
+  # Start script with logging and error handling
+  - path: /opt/messenger/start.sh
+    content: |
+      #!/bin/bash
+      # Redirect all output to log file for debugging
+      exec > >(tee -a /var/log/messenger-startup.log) 2>&1
+      set -x
       
-      chmod 600 /opt/messenger/.env
-      echo ".env file created successfully"
+      echo "=== Starting messenger deployment at $(date) ==="
+      echo "=== Script location: $(pwd) ==="
       
-      # Verify .env file
-      echo "=== Content of .env file (secrets hidden) ==="
-      grep -v "PASSWORD\|SECRET" /opt/messenger/.env || true
-      echo "============================================="
+      # Decode base64 secrets and update .env file
+      echo "=== Decoding secrets ==="
+      JWT_SECRET_DECODED=$(echo '${jwt_secret_b64}' | base64 -d)
+      DB_PASSWORD_DECODED=$(echo '${db_password_b64}' | base64 -d)
+      DEFAULT_USER_DECODED=$(echo '${default_user_b64}' | base64 -d)
+      DEFAULT_PASSWORD_DECODED=$(echo '${default_password_b64}' | base64 -d)
+      
+      # Update .env file with decoded values
+      sed -i "s/JWT_SECRET_PLACEHOLDER/$JWT_SECRET_DECODED/g" /opt/messenger/.env
+      sed -i "s/DB_PASSWORD_PLACEHOLDER/$DB_PASSWORD_DECODED/g" /opt/messenger/.env
+      sed -i "s/DEFAULT_USER_PLACEHOLDER/$DEFAULT_USER_DECODED/g" /opt/messenger/.env
+      sed -i "s/DEFAULT_PASSWORD_PLACEHOLDER/$DEFAULT_PASSWORD_DECODED/g" /opt/messenger/.env
+      
+      # Verify .env file exists
+      if [ ! -f /opt/messenger/.env ]; then
+        echo "ERROR: .env file not found at /opt/messenger/.env"
+        exit 1
+      fi
+      
+      echo "=== .env file created successfully ==="
+      echo "=== .env content (secrets hidden): ==="
+      sed 's/=.*/=***/' /opt/messenger/.env
+      echo "======================================"
       
       # Check Docker
-      echo "Checking Docker status..."
-      docker version
-      docker info
+      echo "=== Checking Docker installation ==="
+      docker --version || {
+        echo "ERROR: Docker not found"
+        exit 1
+      }
       
-      # Pull and run application container
-      echo "Pulling Docker image: ${docker_image}"
-      docker pull ${docker_image} 2>&1
+      # Check if Docker daemon is running
+      echo "=== Checking Docker daemon ==="
+      docker info || {
+        echo "ERROR: Docker daemon not running"
+        exit 1
+      }
       
-      echo "Stopping old container if exists..."
+      # Pull Docker image
+      echo "=== Pulling Docker image: ${docker_image} ==="
+      docker pull ${docker_image} || {
+        echo "ERROR: Failed to pull Docker image"
+        exit 1
+      }
+      
+      # Stop and remove old container if exists
+      echo "=== Cleaning up old container ==="
       docker stop ${container_name} 2>/dev/null || echo "No old container to stop"
       docker rm ${container_name} 2>/dev/null || echo "No old container to remove"
       
-      echo "Starting new container..."
+      # Start new container
+      echo "=== Starting new container ==="
       docker run -d \
         --name ${container_name} \
         --restart unless-stopped \
         -p ${app_port}:${app_port} \
         --env-file /opt/messenger/.env \
-        ${docker_image}
+        ${docker_image} || {
+        echo "ERROR: Failed to start container"
+        exit 1
+      }
       
-      echo "Waiting for container to start..."
-      sleep 5
+      # Wait for container to start
+      echo "=== Waiting 15 seconds for container to start ==="
+      sleep 15
       
-      echo "=== Docker container status ==="
+      # Check container status
+      echo "=== Container status ==="
       docker ps -a
       
-      echo "=== Checking if container is running ==="
-      if docker ps | grep -q ${container_name}; then
-        echo "Container is running!"
-        echo "=== Container logs (first 50 lines) ==="
-        docker logs ${container_name} 2>&1 | head -50 || echo "No logs yet"
-        
-        echo "=== Checking port ${app_port} ==="
-        netstat -tlnp | grep ${app_port} || ss -tlnp | grep ${app_port} || echo "Port ${app_port} not listening"
-        
-        echo "=== Testing health endpoint ==="
-        sleep 2
-        curl -v http://localhost:${app_port}/api/health 2>&1 || echo "Health check failed"
-      else
-        echo "ERROR: Container is not running!"
-        echo "=== Container logs (all) ==="
+      # Check if container is running
+      if ! docker ps | grep -q ${container_name}; then
+        echo "ERROR: Container ${container_name} is not running!"
+        echo "=== Container logs ==="
         docker logs ${container_name} 2>&1 || echo "No logs available"
         exit 1
       fi
       
-      echo "=== Deployment completed at $(date) ==="
+      echo "=== Container is running ==="
+      
+      # Check if port is listening
+      echo "=== Checking port ${app_port} ==="
+      netstat -tulpn 2>/dev/null | grep ${app_port} || \
+        ss -tulpn 2>/dev/null | grep ${app_port} || \
+        echo "WARNING: Port ${app_port} not found in netstat/ss"
+      
+      # Test health endpoint
+      echo "=== Testing health endpoint (waiting 5 seconds) ==="
+      sleep 5
+      curl -v http://localhost:${app_port}/api/health 2>&1 || {
+        echo "WARNING: Health check failed, but container is running"
+        echo "=== Container logs ==="
+        docker logs ${container_name} 2>&1 | tail -50
+      }
+      
+      echo "=== Messenger deployment completed at $(date) ==="
+    owner: root:root
+    permissions: '0755'
 
+# Use list format for runcmd (cloud-init requirement)
 runcmd:
-  # Install packages for debugging
-  - apt-get update
-  - apt-get install -y net-tools curl
+  # Update packages
+  - [ apt-get, update ]
   
-  # Install Docker
-  - echo "Installing Docker..." | tee -a /var/log/cloud-init-output.log
-  - curl -fsSL https://get.docker.com -o get-docker.sh
-  - sh get-docker.sh
-  - usermod -aG docker ubuntu
-  - systemctl start docker
-  - systemctl enable docker
+  # Install required packages
+  - [ apt-get, install, -y, docker.io, net-tools, curl, iputils-ping ]
+  
+  # Start Docker service
+  - [ systemctl, start, docker ]
+  - [ systemctl, enable, docker ]
   
   # Wait for Docker to be ready
-  - echo "Waiting for Docker..." | tee -a /var/log/cloud-init-output.log
-  - sleep 10
-  - docker version | tee -a /var/log/cloud-init-output.log
+  - [ sh, -c, "echo 'Waiting for Docker to be ready...' && sleep 10" ]
   
-  # Setup and start application
-  - echo "Setting up application..." | tee -a /var/log/cloud-init-output.log
-  - mkdir -p /opt/messenger
-  - chmod +x /opt/messenger/start.sh
-  - /opt/messenger/start.sh 2>&1 | tee -a /var/log/cloud-init-output.log
+  # Verify Docker
+  - [ sh, -c, "docker --version >> /var/log/cloud-init-output.log 2>&1" ]
+  
+  # Setup application
+  - [ mkdir, -p, /opt/messenger ]
+  - [ chmod, "755", /opt/messenger ]
+  - [ chmod, "755", /opt/messenger/start.sh ]
+  - [ chmod, "600", /opt/messenger/.env ]
+  
+  # Run startup script with logging
+  - [ sh, -c, "/opt/messenger/start.sh >> /var/log/cloud-init-output.log 2>&1" ]
   
   # Setup cron for reboot
-  - echo "@reboot root /opt/messenger/start.sh >> /var/log/messenger-startup.log 2>&1" > /etc/cron.d/messenger
-  - chmod 644 /etc/cron.d/messenger
+  - [ sh, -c, "echo '@reboot root /opt/messenger/start.sh >> /var/log/messenger-startup.log 2>&1' > /etc/cron.d/messenger" ]
+  - [ chmod, "644", /etc/cron.d/messenger ]
   
   # Final status
-  - echo "=== Cloud-init completed at $(date) ===" | tee -a /var/log/cloud-init-output.log
-  - echo "Logs available at: /var/log/messenger-startup.log" | tee -a /var/log/cloud-init-output.log
-  - echo "Check logs with: tail -f /var/log/messenger-startup.log" | tee -a /var/log/cloud-init-output.log
+  - [ sh, -c, "echo '=== Cloud-init completed at $(date) ===' >> /var/log/cloud-init-output.log" ]
+  - [ sh, -c, "echo 'Check logs: tail -f /var/log/messenger-startup.log' >> /var/log/cloud-init-output.log" ]
+
+# Optional: reboot if needed
+# power_state:
+#   mode: reboot
+#   message: "Rebooting after cloud-init"
+#   timeout: 5
+#   condition: true
