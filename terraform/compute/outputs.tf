@@ -13,6 +13,6 @@ output "instance_count" {
 }
 
 output "target_group_id" {
-  description = "ALB target group ID created by instance group"
-  value       = yandex_compute_instance_group.main.application_load_balancer[0].target_group_id
+  value = yandex_compute_instance_group.main.application_load_balancer[0].target_group_id
+  description = "Target Group ID created by Instance Group"
 }

@@ -20,8 +20,9 @@ variable "security_group_id" {
 }
 
 variable "target_group_id" {
-  description = "ALB target group ID from Instance Group"
+  description = "Target Group ID from Instance Group"
   type        = string
+  default     = null  # Может быть null изначально
 }
 
 variable "enable_https" {

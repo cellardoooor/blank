@@ -46,21 +46,7 @@ module "golden_image" {
   docker_image = var.docker_image
   zone         = var.zone
   subnet_id    = module.network.app_subnet_id
-}
-
-# ALB module - creates Application Load Balancer
-# Must be created before Instance Group to get target_group_id
-module "alb" {
-  source = "../../alb"
-
-  alb_name          = "${var.environment}-messenger-alb"
-  domain            = var.domain
-  network_id        = module.network.vpc_id
-  public_subnet_id  = module.network.public_subnet_id
-  security_group_id = module.network.alb_security_group_id
-  zone              = var.zone
-
-  depends_on = [module.golden_image]
+  depends_on = [module.network]
 }
 
 # Compute module - creates Instance Group using Golden Image
@@ -80,7 +66,6 @@ module "compute" {
 
   # Use Golden Image for fast VM boot (~30 seconds)
   golden_image_id = module.golden_image.image_id
-  target_group_id = module.alb.target_group_id
 
   jwt_secret   = var.jwt_secret
   jwt_duration = var.jwt_duration
@@ -101,4 +86,19 @@ module "compute" {
 
   # Wait for database, golden image, and ALB
   depends_on = [module.database, module.golden_image, module.alb]
+}
+
+# ALB module - creates Application Load Balancer
+module "alb" {
+  source = "../../alb"
+
+  alb_name          = "${var.environment}-messenger-alb"
+  domain            = var.domain
+  network_id        = module.network.vpc_id
+  public_subnet_id  = module.network.public_subnet_id
+  security_group_id = module.network.alb_security_group_id
+  zone              = var.zone
+  target_group_id   = module.compute.target_group_id
+
+  depends_on = [module.golden_image]
 }
