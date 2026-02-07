@@ -103,7 +103,4 @@ module "alb" {
   target_group_id   = module.compute.target_group_id
   
   depends_on = [module.compute]
-  target_group_id   = module.compute.target_group_id
-
-  depends_on = [module.golden_image]
 }
