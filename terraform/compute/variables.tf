@@ -45,8 +45,9 @@ variable "golden_image_id" {
 }
 
 variable "target_group_id" {
-  description = "ALB target group ID to attach instances"
+  description = "Existing Target Group ID (optional). If not provided, IG will create its own"
   type        = string
+  default     = null  # Делаем опциональным!
 }
 
 variable "jwt_secret" {
