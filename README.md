@@ -77,6 +77,7 @@ Internet
 │  • Min: 2 VMs                       │
 │  • Auto-healing                     │
 │  • Rolling updates                  │
+│  • NAT Gateway (Internet access)    │
 └──────────────┬──────────────────────┘
                | PostgreSQL (6432) + SSL
                v
@@ -142,17 +143,14 @@ terraform output certificate_status
 
 ### CI/CD
 
-Two-stage deployment pipeline:
+Single workflow deployment (`.github/workflows/deploy.yml`):
 
-**Stage 1: Infrastructure** (`.github/workflows/infrastructure.yml`)
-- Deploys Terraform infrastructure (ALB, PostgreSQL, Instance Group)
-- Outputs DB_HOST and saves it to GitHub Variables
-- Run this first!
-
-**Stage 2: Application** (`.github/workflows/application.yml`)
-- Builds and pushes Docker image
+**Build & Deploy:**
+- Builds Docker image with SHA tag
+- Pushes to Docker Hub
+- Deploys Terraform infrastructure
 - Triggers rolling update on Instance Group
-- Uses DB_HOST from GitHub Variables
+- Uses DB_HOST from database module output
 
 **Required Secrets:**
 - `DOCKERHUB_USERNAME` - your Docker Hub username
@@ -168,13 +166,11 @@ Two-stage deployment pipeline:
 - `YC_CLOUD_ID` - Yandex Cloud ID
 - `YC_FOLDER_ID` - Yandex Folder ID
 - `DOMAIN` - Domain name (e.g., messenger.example.com)
-- `DB_USER` - Database user
-- `DB_NAME` - Database name
+- `JWT_DURATION` - Token lifetime (default: 24h)
+- `DB_USER` - Database user (default: messenger)
+- `DB_NAME` - Database name (default: messenger)
 - `MIN_INSTANCES` - Minimum VM count (default: 2)
 - `MAX_INSTANCES` - Maximum VM count (default: 4)
-
-**Auto-generated Variables:**
-- `DB_HOST` - Managed PostgreSQL host (set by Infrastructure pipeline)
 
 ## Environment Variables
 
@@ -182,15 +178,12 @@ Two-stage deployment pipeline:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `HTTP_ADDR` | Server bind address | `:8080` |
 | `JWT_SECRET` | JWT signing secret | required |
 | `JWT_DURATION` | Token lifetime | `24h` |
 | `DB_HOST` | Managed PostgreSQL host | required |
-| `DB_PORT` | PostgreSQL port | `6432` |
 | `DB_USER` | Database user | required |
 | `DB_PASSWORD` | Database password | required |
 | `DB_NAME` | Database name | required |
-| `DB_SSLMODE` | SSL mode | `require` |
 
 ### Local Development Only
 
@@ -198,7 +191,6 @@ Two-stage deployment pipeline:
 # For local development with docker-compose:
 DB_HOST=localhost
 DB_PORT=5432
-DB_SSLMODE=disable
 ```
 
 ## Getting YC_TOKEN

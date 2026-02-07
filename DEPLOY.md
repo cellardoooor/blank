@@ -23,6 +23,7 @@ Internet
 │  • Container-Optimized OS           │
 │  • Auto-healing                     │
 │  • Rolling updates (zero-downtime)  │
+│  • NAT Gateway (Internet access)    │
 └──────────────┬──────────────────────┘
                | PostgreSQL (6432) + SSL
                v
@@ -38,13 +39,14 @@ Internet
 ## Сетевая сегментация
 
 - **Public subnet (10.0.1.0/24)**: Application Load Balancer
-- **App subnet (10.0.2.0/24)**: Instance Group (VM с приложением)
+- **App subnet (10.0.2.0/24)**: Instance Group (VM с приложением) + NAT Gateway
 - **DB subnet (10.0.3.0/24)**: Managed PostgreSQL
 
 **Security Groups:**
 - PostgreSQL доступен только из App subnet (порт 6432)
 - Приложение доступно только из ALB (порт 8080)
 - ALB доступен из интернета (порты 80, 443)
+- NAT Gateway позволяет VM выходить в интернет (Docker pull, обновления)
 
 ## Подготовка
 
@@ -73,7 +75,6 @@ Internet
 | `YC_CLOUD_ID` | ID облака Yandex | См. раздел [Получение Cloud/Folder ID](#получение-cloud_id-и-folder_id) | - |
 | `YC_FOLDER_ID` | ID каталога Yandex | См. раздел [Получение Cloud/Folder ID](#получение-cloud_id-и-folder_id) | - |
 | `DOMAIN` | Домен для HTTPS | Например: messenger.example.com | - |
-| `HTTP_ADDR` | Порт приложения | Можно оставить `:8080` | `:8080` |
 | `JWT_DURATION` | Время жизни токена | Можно оставить `24h` | `24h` |
 | `DB_USER` | Пользователь БД | Например: messenger | messenger |
 | `DB_NAME` | Имя базы данных | Например: messenger | messenger |
@@ -273,50 +274,32 @@ terraform plan
 terraform apply
 ```
 
-## CI/CD Pipeline (Two-Stage)
+## CI/CD Pipeline
 
-Используется двухэтапный подход для разделения инфраструктуры и приложения:
+Используется единый workflow для сборки и деплоя:
 
-### Этап 1: Infrastructure Deploy (`.github/workflows/infrastructure.yml`)
+### Workflow: Build and Deploy (`.github/workflows/deploy.yml`)
 
-**Запускается при изменении:**
-- `terraform/**`
-- `.github/workflows/infrastructure.yml`
+**Запускается при:**
+- Push в `main` ветку
 - Вручную (`workflow_dispatch`)
 
 **Что делает:**
-1. Создаёт/обновляет инфраструктуру через Terraform
-2. Получает outputs (DB_HOST, ALB_IP, etc.)
-3. **Обновляет GitHub Variables** (DB_HOST и другие)
-4. Выводит DNS-записи для Let's Encrypt
+1. **Build Stage:**
+   - Собирает Docker образ с SHA тегом
+   - Пушит в Docker Hub
 
-**Важно:** Запустить сначала! Без этого приложение не получит DB_HOST.
+2. **Deploy Stage:**
+   - Разворачивает инфраструктуру через Terraform
+   - Создаёт Managed PostgreSQL
+   - Создаёт Instance Group с новым образом
+   - Настраивает ALB
+   - Триггерит rolling update
 
-### Этап 2: Application Deploy (`.github/workflows/application.yml`)
-
-**Запускается при изменении:**
-- Кода приложения (не terraform!)
-- После успешного Infrastructure Deploy
-- Вручную (`workflow_dispatch`)
-
-**Что делает:**
-1. Проверяет что DB_HOST установлен
-2. Собирает Docker образ
-3. Триггерит rolling update Instance Group
-4. Использует DB_HOST из GitHub Variables
-
-### Порядок первого деплоя
-
-```bash
-# 1. Сначала инфраструктура (создаёт PostgreSQL, ALB, получает DB_HOST)
-.github/workflows/infrastructure.yml
-
-# 2. Ждём создания DNS записи для Let's Encrypt
-#    (выводится в логах infrastructure pipeline)
-
-# 3. Затем приложение (использует DB_HOST из Variables)
-.github/workflows/application.yml
-```
+**Особенности:**
+- Compute модуль ждёт создания Database (`depends_on`)
+- Docker образ использует SHA тег из Build stage
+- Rolling update происходит автоматически
 
 ### Как работает rolling update
 
@@ -349,26 +332,22 @@ State хранится в **Yandex Object Storage (S3)**:
 │   ├── alb/             # Application Load Balancer
 │   ├── compute/         # Instance Group
 │   ├── database/        # Managed PostgreSQL
-│   ├── network/         # VPC, subnets, security groups
+│   ├── network/         # VPC, subnets, security groups, NAT Gateway
 │   └── envs/dev/        # Dev окружение
 └── .github/workflows/    # CI/CD
-    ├── infrastructure.yml  # Stage 1: Infrastructure (Terraform)
-    └── application.yml     # Stage 2: Application (Build & Deploy)
+    └── deploy.yml        # Build & Deploy workflow
 ```
 
 ## Переменные окружения приложения
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `HTTP_ADDR` | Server bind address | `:8080` |
 | `JWT_SECRET` | JWT signing key | `<base64-string>` |
 | `JWT_DURATION` | Token lifetime | `24h` |
 | `DB_HOST` | Managed PostgreSQL host | `rc1a-...mdb.yandexcloud.net` |
-| `DB_PORT` | PostgreSQL port | `6432` |
 | `DB_USER` | Database user | `messenger` |
 | `DB_PASSWORD` | Database password | `<password>` |
 | `DB_NAME` | Database name | `messenger` |
-| `DB_SSLMODE` | SSL mode | `require` |
 
 ## Доступ к приложению
 

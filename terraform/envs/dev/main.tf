@@ -72,6 +72,9 @@ module "compute" {
 
   min_instances = var.min_instances
   max_instances = var.max_instances
+
+  # Wait for database to be fully created before starting compute instances
+  depends_on = [module.database]
 }
 
 # ALB module - creates Application Load Balancer
