@@ -47,6 +47,7 @@ module "golden_image" {
   zone         = var.zone
   subnet_id    = module.network.app_subnet_id
   depends_on = [module.network]
+  image_version = var.image_version
 }
 
 # Compute module - creates Instance Group using Golden Image
@@ -103,4 +104,7 @@ module "alb" {
   target_group_id   = module.compute.target_group_id
   
   depends_on = [module.compute]
+  target_group_id   = module.compute.target_group_id
+
+  depends_on = [module.golden_image]
 }

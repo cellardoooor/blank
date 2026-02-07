@@ -102,3 +102,8 @@ variable "certificate_id" {
   type        = string
   default     = null
 }
+
+variable "image_version" {
+  type = string
+}
+
