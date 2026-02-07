@@ -1,9 +1,3 @@
-# Golden Image - pre-built image with Docker and application
-variable "golden_image_id" {
-  description = "ID of Golden Image with pre-installed Docker and application"
-  type        = string
-}
-
 locals {
   # Minimal cloud-init - only sets environment variables
   # Golden Image already has Docker and start.sh installed
