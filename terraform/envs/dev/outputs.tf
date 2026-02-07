@@ -88,3 +88,13 @@ output "database_connection_string" {
   value       = module.database.connection_string
   sensitive   = true
 }
+
+output "golden_image_id" {
+  description = "ID of the Golden Image with pre-installed Docker and application"
+  value       = module.golden_image.image_id
+}
+
+output "golden_image_name" {
+  description = "Name of the Golden Image"
+  value       = module.golden_image.image_name
+}

@@ -37,7 +37,33 @@ module "database" {
   zone              = var.zone
 }
 
-# Compute module - creates Instance Group (creates its own target group)
+# Golden Image module - creates VM with pre-installed Docker and application
+# This is a one-time build step, VM can be deleted after image creation
+module "golden_image" {
+  source = "../../golden-image"
+
+  image_name   = "${var.environment}-messenger-golden"
+  docker_image = var.docker_image
+  zone         = var.zone
+  subnet_id    = module.network.app_subnet_id
+}
+
+# ALB module - creates Application Load Balancer
+# Must be created before Instance Group to get target_group_id
+module "alb" {
+  source = "../../alb"
+
+  alb_name          = "${var.environment}-messenger-alb"
+  domain            = var.domain
+  network_id        = module.network.vpc_id
+  public_subnet_id  = module.network.public_subnet_id
+  security_group_id = module.network.alb_security_group_id
+  zone              = var.zone
+
+  depends_on = [module.golden_image]
+}
+
+# Compute module - creates Instance Group using Golden Image
 module "compute" {
   source = "../../compute"
 
@@ -52,10 +78,9 @@ module "compute" {
   security_group_ids  = [module.network.app_security_group_id]
   service_account_id  = var.service_account_id
 
-  docker_image   = var.docker_image
-  container_name = var.container_name
-  app_port       = var.app_port
-  http_addr      = ":8080"
+  # Use Golden Image for fast VM boot (~30 seconds)
+  golden_image_id = module.golden_image.image_id
+  target_group_id = module.alb.target_group_id
 
   jwt_secret   = var.jwt_secret
   jwt_duration = var.jwt_duration
@@ -74,21 +99,6 @@ module "compute" {
   min_instances = var.min_instances
   max_instances = var.max_instances
 
-  # Wait for database to be fully created before starting compute instances
-  depends_on = [module.database]
-}
-
-# ALB module - creates Application Load Balancer (uses compute's target group)
-module "alb" {
-  source = "../../alb"
-
-  alb_name          = "${var.environment}-messenger-alb"
-  domain            = var.domain
-  network_id        = module.network.vpc_id
-  public_subnet_id  = module.network.public_subnet_id
-  security_group_id = module.network.alb_security_group_id
-  zone              = var.zone
-  target_group_id   = module.compute.target_group_id
-
-  depends_on = [module.compute]
+  # Wait for database, golden image, and ALB
+  depends_on = [module.database, module.golden_image, module.alb]
 }

@@ -39,15 +39,14 @@ variable "security_group_ids" {
   default     = []
 }
 
-variable "docker_image" {
-  description = "Docker image URL"
+variable "golden_image_id" {
+  description = "ID of Golden Image with pre-installed Docker and application"
   type        = string
 }
 
-variable "container_name" {
-  description = "Docker container name"
+variable "target_group_id" {
+  description = "ALB target group ID to attach instances"
   type        = string
-  default     = "messenger-app"
 }
 
 variable "jwt_secret" {
@@ -101,12 +100,6 @@ variable "db_sslmode" {
   description = "SSL mode"
   type        = string
   default     = "require"
-}
-
-variable "app_port" {
-  description = "Application port inside container"
-  type        = number
-  default     = 8080
 }
 
 variable "default_user" {

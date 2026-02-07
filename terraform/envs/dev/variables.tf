@@ -36,18 +36,6 @@ variable "docker_image" {
   type        = string
 }
 
-variable "container_name" {
-  description = "Docker container name"
-  type        = string
-  default     = "messenger-app"
-}
-
-variable "app_port" {
-  description = "Application port inside container"
-  type        = number
-  default     = 8080
-}
-
 variable "jwt_secret" {
   description = "JWT signing secret"
   type        = string

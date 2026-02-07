@@ -1,0 +1,32 @@
+#cloud-config
+# Minimal cloud-init for Instance Group VMs
+# Golden Image already has Docker and application installed
+# This only sets up environment variables and starts the container
+
+write_files:
+  # Environment file with all variables
+  - path: /opt/messenger/.env
+    content: |
+      HTTP_ADDR=${http_addr}
+      JWT_SECRET=${jwt_secret}
+      JWT_DURATION=${jwt_duration}
+      DB_HOST=${db_host}
+      DB_PORT=${db_port}
+      DB_USER=${db_user}
+      DB_PASSWORD=${db_password}
+      DB_NAME=${db_name}
+      DB_SSLMODE=${db_sslmode}
+      DEFAULT_USER=${default_user}
+      DEFAULT_PASSWORD=${default_password}
+    owner: root:root
+    permissions: '0600'
+
+runcmd:
+  # Ensure .env is readable
+  - [ chmod, "600", /opt/messenger/.env ]
+  
+  # Start application using pre-installed script
+  - [ sh, -c, "/opt/messenger/start.sh >> /var/log/messenger-startup.log 2>&1" ]
+  
+  # Verify container is running
+  - [ sh, -c, "sleep 5 && docker ps | grep messenger || (echo 'Container not running' && docker logs messenger)" ]

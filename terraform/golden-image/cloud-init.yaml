@@ -1,0 +1,105 @@
+#cloud-config
+# Golden Image Builder - prepares VM with Docker and application
+
+users:
+  - name: ubuntu
+    groups: [ sudo, docker ]
+    shell: /bin/bash
+    sudo: [ "ALL=(ALL) NOPASSWD:ALL" ]
+
+write_files:
+  # Docker installation and setup script
+  - path: /opt/setup-docker.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+      exec > >(tee -a /var/log/setup-docker.log) 2>&1
+      
+      echo "=== Starting Docker setup at $(date) ==="
+      
+      # Update packages
+      apt-get update
+      apt-get install -y docker.io net-tools curl
+      
+      # Start Docker
+      systemctl start docker
+      systemctl enable docker
+      
+      # Wait for Docker
+      sleep 5
+      
+      # Verify Docker
+      docker --version
+      docker info
+      
+      # Pull application image
+      echo "Pulling Docker image: ${docker_image}"
+      docker pull ${docker_image}
+      
+      # Verify image pulled
+      docker images | grep -q "${docker_image}" || {
+        echo "ERROR: Docker image not found after pull"
+        exit 1
+      }
+      
+      # Create required directories
+      mkdir -p /opt/messenger
+      
+      echo "=== Docker setup completed at $(date) ==="
+      echo "Golden Image is ready for capture"
+
+  # Script that will run on IG VMs to start application
+  - path: /opt/messenger/start.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      exec > >(tee -a /var/log/messenger-startup.log) 2>&1
+      set -e
+      
+      echo "=== Starting messenger at $(date) ==="
+      
+      # Check .env file exists (passed via metadata)
+      if [ ! -f /opt/messenger/.env ]; then
+        echo "ERROR: .env file not found!"
+        echo "Expected environment variables via metadata"
+        exit 1
+      fi
+      
+      echo "Environment file found"
+      
+      # Source the environment file
+      set -a
+      source /opt/messenger/.env
+      set +a
+      
+      # Start container
+      echo "Starting container..."
+      docker run -d \
+        --name messenger \
+        --restart unless-stopped \
+        -p 8080:8080 \
+        --env-file /opt/messenger/.env \
+        ${docker_image}
+      
+      echo "Container started"
+      
+      # Verify it's running
+      sleep 2
+      docker ps | grep messenger || {
+        echo "ERROR: Container not running"
+        docker logs messenger
+        exit 1
+      }
+      
+      echo "=== Messenger started successfully at $(date) ==="
+
+runcmd:
+  # Run Docker setup
+  - [ sh, -c, "/opt/setup-docker.sh" ]
+  
+  # Signal that setup is complete
+  - [ sh, -c, "echo 'Golden Image ready' > /tmp/golden-image-ready" ]
+  - [ sh, -c, "echo 'Setup completed at $(date)' >> /var/log/setup-docker.log" ]
+
+final_message: "Golden Image builder setup completed"

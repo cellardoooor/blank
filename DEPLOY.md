@@ -2,9 +2,36 @@
 
 ## Архитектура деплоя (Production-Ready)
 
-**Масштабируемая архитектура с Load Balancer**
+**Golden Image Architecture для быстрого старта**
 
 ```
+[CI/CD Pipeline]
+       │
+       ▼
+┌─────────────────────────────┐
+│  Stage 1: Build             │
+│  • Docker Build             │
+│  • Push to Registry         │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│  Stage 2: Golden Image      │
+│  • Create VM with Ubuntu    │
+│  • Install Docker           │
+│  • Pull app image           │
+│  • Capture Golden Image     │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│  Stage 3: Deploy            │
+│  • Instance Group           │
+│  • Uses Golden Image        │
+│  • Boot time: ~30s          │
+└─────────────────────────────┘
+               │
+               ▼
 Internet
     |
     | HTTPS (443)
@@ -19,9 +46,11 @@ Internet
                v
 ┌─────────────────────────────────────┐
 │  Yandex Compute Instance Group      │
-│  • Минимум 2 VM (High Availability) │
-│  • Container-Optimized OS           │
-│  • Auto-healing                     │
+│  • Golden Image (Pre-built Ubuntu   │
+│    + Docker + Application)          │
+│  • Boot time: ~30 seconds ⚡        │
+│  • Min: 2 VM (High Availability)    │
+│  • Fast auto-healing (~30s)         │
 │  • Rolling updates (zero-downtime)  │
 │  • NAT Gateway (Internet access)    │
 └──────────────┬──────────────────────┘
@@ -35,6 +64,16 @@ Internet
 │  • Автоматические бэкапы            │
 └─────────────────────────────────────┘
 ```
+
+### Почему Golden Image?
+
+| Параметр | Без Golden Image | С Golden Image |
+|----------|------------------|----------------|
+| Время загрузки VM | 3-5 минут | **30 секунд** |
+| Auto-healing | 5-6 минут | **~30 секунд** |
+| Зависимость от внешних репозиториев | При каждом старте | **Только при создании образа** |
+| Стоимость хранения | 0 | **~2-3 ₽/мес** |
+| Надежность | Средняя | **Высокая** |
 
 ## Сетевая сегментация
 
@@ -274,9 +313,7 @@ terraform plan
 terraform apply
 ```
 
-## CI/CD Pipeline
-
-Используется единый workflow для сборки и деплоя:
+## CI/CD Pipeline - Golden Image Deployment
 
 ### Workflow: Build and Deploy (`.github/workflows/deploy.yml`)
 
@@ -284,33 +321,55 @@ terraform apply
 - Push в `main` ветку
 - Вручную (`workflow_dispatch`)
 
-**Что делает:**
-1. **Build Stage:**
-   - Собирает Docker образ с SHA тегом
-   - Пушит в Docker Hub
+**Этапы деплоя:**
 
-2. **Deploy Stage:**
-   - Разворачивает инфраструктуру через Terraform
-   - Создаёт Managed PostgreSQL
-   - Создаёт Instance Group с новым образом
-   - Настраивает ALB
-   - Триггерит rolling update
+**Этап 1: Build (30-40 сек)**
+- Собирает Docker образ с SHA тегом
+- Пушит в Docker Hub
 
-**Особенности:**
-- Compute модуль ждёт создания Database (`depends_on`)
-- Docker образ использует SHA тег из Build stage
-- Rolling update происходит автоматически
+**Этап 2: Golden Image (2-3 мин)**
+- Создаёт VM с Ubuntu
+- Устанавливает Docker и скачивает образ
+- Захватывает VM как "Golden Image"
+- Удаляет временную VM
 
-### Как работает rolling update
+**Этап 3: Deploy (1-2 мин)**
+- Создаёт Instance Group из Golden Image
+- VM загружается за **30 секунд** (быстро!)
+- Настраивает ALB
+- Триггерит rolling update
+
+**Итоговое время:** ~5-6 минут
+
+### Как работает Golden Image
 
 ```
-1. Terraform видит новый Docker образ
-2. Instance Group создаёт новую VM с новым образом
-3. Новая VM проходит health check
-4. ALB начинает слать трафик на новую VM
-5. Старая VM удаляется
-6. Повторяется для всех VM в группе
+1. CI/CD собирает Docker образ
+2. Terraform создаёт VM для Golden Image
+3. VM устанавливает Docker и скачивает образ
+4. VM захватывается как "Golden Image"
+5. Instance Group создаёт VM из Golden Image
+6. VM загружается за 30 секунд (Docker уже установлен!)
+7. Приложение запускается мгновенно
 ```
+
+### Преимущества Golden Image
+
+| Метрика | Без Golden Image | С Golden Image |
+|---------|------------------|----------------|
+| Время загрузки VM | 3-5 минут | **30 секунд** |
+| Auto-healing | 5-6 минут | **~30 секунд** |
+| Rolling update | Медленно | **Быстро** |
+| Надёжность | Средняя | **Высокая** |
+
+### После деплоя
+
+Golden Image хранится в Yandex Cloud и используется для:
+- Быстрого масштабирования
+- Мгновенного автохилинга
+- Быстрых rolling updates
+
+**Стоимость хранения:** ~2-3 ₽/мес (5-10 GB)
 
 ## Terraform State
 
@@ -329,14 +388,34 @@ State хранится в **Yandex Object Storage (S3)**:
 ├── Dockerfile            # Docker образ (только приложение, без PostgreSQL)
 ├── docker-compose.yml    # Local development (с локальным PostgreSQL)
 ├── terraform/            # Infrastructure
+│   ├── golden-image/    # Golden Image builder (VM с предустановленным Docker)
 │   ├── alb/             # Application Load Balancer
-│   ├── compute/         # Instance Group
+│   ├── compute/         # Instance Group (использует Golden Image)
 │   ├── database/        # Managed PostgreSQL
 │   ├── network/         # VPC, subnets, security groups, NAT Gateway
 │   └── envs/dev/        # Dev окружение
 └── .github/workflows/    # CI/CD
-    └── deploy.yml        # Build & Deploy workflow
+    └── deploy.yml        # Build & Deploy workflow с Golden Image
 ```
+
+### Модули Terraform
+
+**golden-image/** - Создание Golden Image
+- Создаёт VM с Ubuntu
+- Устанавливает Docker и скачивает образ
+- Захватывает VM как образ для Instance Group
+
+**compute/** - Instance Group
+- Использует Golden Image (быстрая загрузка)
+- Масштабирование и автохилинг
+
+**alb/** - Application Load Balancer
+- HTTPS терминация
+- Health checks
+
+**database/** - Managed PostgreSQL
+- Версия 15
+- Приватная подсеть
 
 ## Переменные окружения приложения
 

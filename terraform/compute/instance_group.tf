@@ -1,29 +1,25 @@
-data "yandex_compute_image" "ubuntu" {
-  family = "ubuntu-2204-lts"
+# Golden Image - pre-built image with Docker and application
+variable "golden_image_id" {
+  description = "ID of Golden Image with pre-installed Docker and application"
+  type        = string
 }
 
 locals {
-  cloud_init = templatefile("${path.module}/cloud_init.yaml", {
-    docker_image         = var.docker_image
-    container_name       = var.container_name
-    app_port             = var.app_port
+  # Minimal cloud-init - only sets environment variables
+  # Golden Image already has Docker and start.sh installed
+  cloud_init = templatefile("${path.module}/cloud-init-minimal.yaml", {
     http_addr            = var.http_addr
-    jwt_secret_b64       = base64encode(var.jwt_secret)
+    jwt_secret           = var.jwt_secret
     jwt_duration         = var.jwt_duration
     db_host              = var.db_host
     db_port              = var.db_port
     db_user              = var.db_user
-    db_password_b64      = base64encode(var.db_password)
+    db_password          = var.db_password
     db_name              = var.db_name
     db_sslmode           = var.db_sslmode
-    default_user_b64     = base64encode(var.default_user)
-    default_password_b64 = base64encode(var.default_password)
+    default_user         = var.default_user
+    default_password     = var.default_password
   })
-}
-
-# Force replacement trigger - creates new VM on every docker_image change
-resource "terraform_data" "replacement" {
-  input = var.docker_image
 }
 
 # Instance Group for high availability and auto-scaling
@@ -42,7 +38,7 @@ resource "yandex_compute_instance_group" "main" {
 
     boot_disk {
       initialize_params {
-        image_id = data.yandex_compute_image.ubuntu.id
+        image_id = var.golden_image_id  # Use Golden Image instead of Ubuntu
         type     = "network-ssd"
         size     = var.disk_size
       }
@@ -52,26 +48,24 @@ resource "yandex_compute_instance_group" "main" {
       network_id         = var.network_id
       subnet_ids         = [var.subnet_id]
       security_group_ids = var.security_group_ids
-      nat                = false # No NAT, use ALB for external access
+      nat                = false  # No NAT needed, use ALB
     }
 
     metadata = {
       user-data = local.cloud_init
-      # Version triggers rolling update when docker_image changes
-      version = md5(var.docker_image)
     }
   }
 
   scale_policy {
-  auto_scale {
-    initial_size           = 2
-    measurement_duration   = 60
-    cpu_utilization_target = 75
-    warmup_duration        = 120
-    min_zone_size          = var.min_instances
-    max_size               = var.max_instances
+    auto_scale {
+      initial_size           = var.min_instances
+      measurement_duration   = 60
+      cpu_utilization_target = 75
+      warmup_duration        = 120
+      min_zone_size          = var.min_instances
+      max_size               = var.max_instances
+    }
   }
-}
 
   allocation_policy {
     zones = [var.zone]
@@ -81,21 +75,17 @@ resource "yandex_compute_instance_group" "main" {
     max_unavailable  = 1
     max_expansion    = 1
     max_creating     = 1
-    startup_duration = 180
+    startup_duration = 60  # Reduced from 180 - Golden Image boots faster
   }
 
-  # Note: Health check is managed by ALB backend group only
-  # Do not add health_check block here - it conflicts with ALB health checks
+  # Note: Health check managed by ALB only
 
-  # Create ALB target group automatically (Yandex Cloud doesn't allow external target_group_id)
+  # Create ALB target group automatically
   application_load_balancer {
-    # Target group will be created automatically by Instance Group
+    target_group_id = var.target_group_id
   }
 
   lifecycle {
     create_before_destroy = true
-    replace_triggered_by = [
-      terraform_data.replacement
-    ]
   }
 }
