@@ -1,4 +1,9 @@
 #cloud-config
+# DEBUGGING: Logs are saved to:
+#   - /var/log/cloud-init-output.log (cloud-init commands)
+#   - /var/log/messenger-startup.log (application startup)
+# Access via: yc compute connect-to-serial-port <instance-id>
+
 package_update: true
 package_upgrade: true
 
@@ -15,15 +20,20 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
+      exec > >(tee -a /var/log/messenger-startup.log) 2>&1
       set -e
       
+      echo "=== Starting messenger deployment at $(date) ==="
+      
       # Decode environment variables
+      echo "Decoding environment variables..."
       JWT_SECRET=$(echo '${jwt_secret_b64}' | base64 -d)
       DB_PASSWORD=$(echo '${db_password_b64}' | base64 -d)
       DEFAULT_USER=$(echo '${default_user_b64}' | base64 -d)
       DEFAULT_PASSWORD=$(echo '${default_password_b64}' | base64 -d)
       
       # Create environment file
+      echo "Creating .env file..."
       cat > /opt/messenger/.env << EOF
       HTTP_ADDR=${http_addr}
       JWT_SECRET=$JWT_SECRET
@@ -39,11 +49,27 @@ write_files:
       EOF
       
       chmod 600 /opt/messenger/.env
+      echo ".env file created successfully"
+      
+      # Verify .env file
+      echo "=== Content of .env file (secrets hidden) ==="
+      grep -v "PASSWORD\|SECRET" /opt/messenger/.env || true
+      echo "============================================="
+      
+      # Check Docker
+      echo "Checking Docker status..."
+      docker version
+      docker info
       
       # Pull and run application container
-      docker pull ${docker_image}
-      docker stop ${container_name} 2>/dev/null || true
-      docker rm ${container_name} 2>/dev/null || true
+      echo "Pulling Docker image: ${docker_image}"
+      docker pull ${docker_image} 2>&1
+      
+      echo "Stopping old container if exists..."
+      docker stop ${container_name} 2>/dev/null || echo "No old container to stop"
+      docker rm ${container_name} 2>/dev/null || echo "No old container to remove"
+      
+      echo "Starting new container..."
       docker run -d \
         --name ${container_name} \
         --restart unless-stopped \
@@ -51,20 +77,62 @@ write_files:
         --env-file /opt/messenger/.env \
         ${docker_image}
       
-      echo "Application started at $(date)"
+      echo "Waiting for container to start..."
+      sleep 5
+      
+      echo "=== Docker container status ==="
+      docker ps -a
+      
+      echo "=== Checking if container is running ==="
+      if docker ps | grep -q ${container_name}; then
+        echo "Container is running!"
+        echo "=== Container logs (first 50 lines) ==="
+        docker logs ${container_name} 2>&1 | head -50 || echo "No logs yet"
+        
+        echo "=== Checking port ${app_port} ==="
+        netstat -tlnp | grep ${app_port} || ss -tlnp | grep ${app_port} || echo "Port ${app_port} not listening"
+        
+        echo "=== Testing health endpoint ==="
+        sleep 2
+        curl -v http://localhost:${app_port}/api/health 2>&1 || echo "Health check failed"
+      else
+        echo "ERROR: Container is not running!"
+        echo "=== Container logs (all) ==="
+        docker logs ${container_name} 2>&1 || echo "No logs available"
+        exit 1
+      fi
+      
+      echo "=== Deployment completed at $(date) ==="
 
 runcmd:
+  # Install packages for debugging
+  - apt-get update
+  - apt-get install -y net-tools curl
+  
   # Install Docker
+  - echo "Installing Docker..." | tee -a /var/log/cloud-init-output.log
   - curl -fsSL https://get.docker.com -o get-docker.sh
   - sh get-docker.sh
   - usermod -aG docker ubuntu
   - systemctl start docker
   - systemctl enable docker
+  
   # Wait for Docker to be ready
+  - echo "Waiting for Docker..." | tee -a /var/log/cloud-init-output.log
   - sleep 10
+  - docker version | tee -a /var/log/cloud-init-output.log
+  
   # Setup and start application
+  - echo "Setting up application..." | tee -a /var/log/cloud-init-output.log
   - mkdir -p /opt/messenger
   - chmod +x /opt/messenger/start.sh
-  - /opt/messenger/start.sh
+  - /opt/messenger/start.sh 2>&1 | tee -a /var/log/cloud-init-output.log
+  
+  # Setup cron for reboot
   - echo "@reboot root /opt/messenger/start.sh >> /var/log/messenger-startup.log 2>&1" > /etc/cron.d/messenger
   - chmod 644 /etc/cron.d/messenger
+  
+  # Final status
+  - echo "=== Cloud-init completed at $(date) ===" | tee -a /var/log/cloud-init-output.log
+  - echo "Logs available at: /var/log/messenger-startup.log" | tee -a /var/log/cloud-init-output.log
+  - echo "Check logs with: tail -f /var/log/messenger-startup.log" | tee -a /var/log/cloud-init-output.log
