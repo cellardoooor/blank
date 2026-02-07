@@ -21,6 +21,11 @@ locals {
   })
 }
 
+# Force replacement trigger - creates new VM on every docker_image change
+resource "terraform_data" "replacement" {
+  input = var.docker_image
+}
+
 # Instance Group for high availability and auto-scaling
 resource "yandex_compute_instance_group" "main" {
   name               = var.instance_group_name
@@ -89,5 +94,8 @@ resource "yandex_compute_instance_group" "main" {
 
   lifecycle {
     create_before_destroy = true
+    replace_triggered_by = [
+      terraform_data.replacement
+    ]
   }
 }
