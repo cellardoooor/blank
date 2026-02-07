@@ -34,11 +34,11 @@ write_files:
       docker info
       
       # Pull application image
-      echo "Pulling Docker image: ${docker_image}"
-      docker pull ${docker_image}
+      echo "Pulling Docker image: $${docker_image}"
+      docker pull $${docker_image}
       
       # Verify image pulled
-      docker images | grep -q "${docker_image}" || {
+      docker images | grep -q "$${docker_image}" || {
         echo "ERROR: Docker image not found after pull"
         exit 1
       }
@@ -80,7 +80,7 @@ write_files:
         --restart unless-stopped \
         -p 8080:8080 \
         --env-file /opt/messenger/.env \
-        ${docker_image}
+        $${docker_image}
       
       echo "Container started"
       
