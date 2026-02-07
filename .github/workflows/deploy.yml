@@ -84,10 +84,17 @@ jobs:
             -backend-config="skip_credentials_validation=true" \
             -backend-config="skip_metadata_api_check=true" \
             -backend-config="skip_requesting_account_id=true"
+                  
+      - name: Generate Golden Image version
+        id: image_version
+        run: |
+          IMAGE_VERSION=$(date +%Y%m%d-%H%M%S)
+          echo "image_version=$IMAGE_VERSION" >> $GITHUB_OUTPUT
 
       - name: Terraform Plan
         working-directory: ${{ env.TF_ROOT }}
         env:
+          TF_VAR_image_version: ${{ steps.image_version.outputs.image_version }}
           TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
           TF_VAR_yc_cloud_id: ${{ vars.YC_CLOUD_ID }}
           TF_VAR_yc_folder_id: ${{ vars.YC_FOLDER_ID }}
@@ -110,6 +117,7 @@ jobs:
       - name: Terraform Apply
         working-directory: ${{ env.TF_ROOT }}
         env:
+          TF_VAR_image_version: ${{ steps.image_version.outputs.image_version }}
           TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
           TF_VAR_yc_cloud_id: ${{ vars.YC_CLOUD_ID }}
           TF_VAR_yc_folder_id: ${{ vars.YC_FOLDER_ID }}
