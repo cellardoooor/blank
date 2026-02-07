@@ -37,23 +37,6 @@ module "database" {
   zone              = var.zone
 }
 
-# Database module - creates Managed PostgreSQL
-module "database" {
-  source = "../../database"
-
-  cluster_name      = "${var.environment}-messenger-postgres"
-  db_name           = var.db_name
-  db_user           = var.db_user
-  db_password       = var.db_password
-  network_id        = module.network.vpc_id
-  subnet_id         = module.network.db_subnet_id
-  security_group_id = module.network.db_security_group_id
-  pg_version        = "15"
-  resource_preset   = "s2.micro"
-  disk_size         = 20
-  zone              = var.zone
-}
-
 # Compute module - creates Instance Group (creates its own target group)
 module "compute" {
   source = "../../compute"
