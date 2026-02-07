@@ -55,6 +55,7 @@ module "compute" {
   docker_image   = var.docker_image
   container_name = var.container_name
   app_port       = var.app_port
+  http_addr      = ":8080"
 
   jwt_secret   = var.jwt_secret
   jwt_duration = var.jwt_duration
