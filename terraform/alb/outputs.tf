@@ -18,6 +18,11 @@ output "backend_group_id" {
   value       = yandex_alb_backend_group.main.id
 }
 
+output "target_group_id" {
+  description = "Target Group ID for Instance Group attachment"
+  value       = yandex_alb_target_group.main.id
+}
+
 output "certificate_id" {
   description = "Certificate ID"
   value       = yandex_cm_certificate.main.id

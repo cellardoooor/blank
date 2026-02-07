@@ -53,7 +53,7 @@ resource "yandex_compute_instance_group" "main" {
     metadata = {
       user-data = local.cloud_init
       # Version triggers rolling update when docker_image changes
-      version = md5("${var.docker_image}-${timestamp()}")
+      version = md5(var.docker_image)
     }
   }
 
@@ -75,7 +75,7 @@ resource "yandex_compute_instance_group" "main" {
   deploy_policy {
     max_unavailable  = 1
     max_expansion    = 1
-    max_creating     = 2
+    max_creating     = 1
     startup_duration = 180
   }
 
@@ -91,10 +91,9 @@ resource "yandex_compute_instance_group" "main" {
     }
   }
 
-  # Create ALB target group automatically
+  # Attach to ALB target group
   application_load_balancer {
-    # Target group will be created automatically
-    # Yandex Cloud doesn't allow specifying existing target_group_id
+    target_group_id = var.target_group_id
   }
 
   lifecycle {

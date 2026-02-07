@@ -8,6 +8,11 @@ resource "yandex_cm_certificate" "main" {
   }
 }
 
+# Target Group - created separately to be shared with Instance Group
+resource "yandex_alb_target_group" "main" {
+  name = "${var.alb_name}-targets"
+}
+
 # HTTP Router
 resource "yandex_alb_http_router" "main" {
   name = "${var.alb_name}-router"
@@ -43,7 +48,7 @@ resource "yandex_alb_backend_group" "main" {
     name             = "messenger-backend"
     weight           = 100
     port             = 8080
-    target_group_ids = [var.target_group_id]
+    target_group_ids = [yandex_alb_target_group.main.id]
     healthcheck {
       timeout             = "10s"
       interval            = "5s"
