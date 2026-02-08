@@ -39,6 +39,7 @@ jobs:
 
       - name: Get SHA tag
         id: sha
+        shell: bash
         run: |
           SHORT_SHA=${GITHUB_SHA::7}
           SHA_TAG="sha-${SHORT_SHA}"
@@ -83,7 +84,7 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           terraform init \
-            -backend-config="endpoints={s3=\"https://storage.yandexcloud.net \"}" \
+            -backend-config="endpoints={s3=\"https://storage.yandexcloud.net\"}" \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
             -backend-config="region=ru-central1" \
             -backend-config="key=dev/terraform.tfstate" \
