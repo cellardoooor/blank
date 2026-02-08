@@ -43,7 +43,7 @@ resource "yandex_alb_backend_group" "main" {
     name             = "messenger-backend"
     weight           = 100
     port             = 8080
-    target_group_ids = [yandex_alb_target_group.backend.id]
+    target_group_ids = [module.compute.target_group_id]
     healthcheck {
       timeout             = "10s"
       interval            = "5s"
