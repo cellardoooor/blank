@@ -19,6 +19,11 @@ variable "security_group_id" {
   type        = string
 }
 
+variable "target_group_id" {
+  description = "ALB target group ID from Instance Group"
+  type        = string
+}
+
 variable "enable_https" {
   description = "Enable HTTPS with Let's Encrypt"
   type        = bool

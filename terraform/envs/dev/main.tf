@@ -94,5 +94,6 @@ module "alb" {
   security_group_id = module.network.alb_security_group_id
   zone              = var.zone
 
+  target_group_id   = module.compute.target_group_id
   depends_on = [module.compute]
 }
