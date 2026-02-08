@@ -55,7 +55,6 @@ module "compute" {
   subnet_id           = module.network.app_subnet_id
   security_group_ids  = [module.network.app_security_group_id]
   service_account_id  = var.service_account_id
-  target_group_id = yandex_alb_target_group.backend.id
 
   docker_image   = var.docker_image
   container_name = var.container_name
@@ -93,7 +92,7 @@ module "alb" {
   public_subnet_id  = module.network.public_subnet_id
   security_group_id = module.network.alb_security_group_id
   zone              = var.zone
-  target_group_id = yandex_alb_target_group.backend.id
+  target_group_id = module.compute.target_group_id
 
   depends_on = [module.compute]
 }

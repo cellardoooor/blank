@@ -90,7 +90,6 @@ resource "yandex_compute_instance_group" "main" {
   # Create ALB target group automatically (Yandex Cloud doesn't allow external target_group_id)
   application_load_balancer {
     # Target group will be created automatically by Instance Group
-    target_group_id = var.target_group_id
   }
 
   lifecycle {
