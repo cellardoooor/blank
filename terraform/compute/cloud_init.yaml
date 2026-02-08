@@ -32,8 +32,8 @@ write_files:
   - path: /opt/messenger/start.sh
     content: |
       #!/bin/bash
-      # Redirect all output to log file for debugging
-      exec > >(tee -a /var/log/messenger-startup.log) 2>&1
+      # Output to both serial console (ttyS0) and log file
+      exec > >(tee /dev/ttyS0 | tee -a /var/log/messenger-startup.log) 2>&1
       set -x
       
       echo "=== Starting messenger deployment at $(date) ==="
@@ -59,6 +59,16 @@ write_files:
       fi
       
       echo "=== .env file created successfully ==="
+      
+      # Test database connectivity before starting app
+      echo "=== Testing database connectivity ==="
+      echo "DB_HOST: ${db_host}"
+      echo "DB_PORT: ${db_port}"
+      timeout 10 bash -c "</dev/tcp/${db_host}/${db_port}" && echo "Database connection: OK" || {
+        echo "ERROR: Cannot connect to database at ${db_host}:${db_port}"
+        echo "Checking network connectivity..."
+        ping -c 3 ${db_host} || echo "Cannot ping DB host"
+      }
       echo "=== .env content (secrets hidden): ==="
       sed 's/=.*/=***/' /opt/messenger/.env
       echo "======================================"
@@ -130,9 +140,14 @@ write_files:
       sleep 5
       curl -v http://localhost:${app_port}/api/health 2>&1 || {
         echo "WARNING: Health check failed, but container is running"
-        echo "=== Container logs ==="
-        docker logs ${container_name} 2>&1 | tail -50
+        echo "=== Container logs (last 100 lines) ==="
+        docker logs ${container_name} 2>&1 | tail -100
+        echo "=== End of container logs ==="
       }
+      
+      # Stream container logs to serial console for debugging
+      echo "=== Streaming container logs (first 50 lines) ==="
+      docker logs ${container_name} 2>&1 | head -50
       
       echo "=== Messenger deployment completed at $(date) ==="
     owner: root:root
@@ -162,8 +177,8 @@ runcmd:
   - [ chmod, "755", /opt/messenger/start.sh ]
   - [ chmod, "600", /opt/messenger/.env ]
   
-  # Run startup script with logging
-  - [ sh, -c, "/opt/messenger/start.sh >> /var/log/cloud-init-output.log 2>&1" ]
+  # Run startup script - output goes to serial console via ttyS0
+  - [ sh, -c, "/opt/messenger/start.sh" ]
   
   # Setup cron for reboot
   - [ sh, -c, "echo '@reboot root /opt/messenger/start.sh >> /var/log/messenger-startup.log 2>&1' > /etc/cron.d/messenger" ]
