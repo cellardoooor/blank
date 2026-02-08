@@ -42,6 +42,7 @@ variable "security_group_ids" {
 variable "docker_image" {
   description = "Docker image URL"
   type        = string
+  default     = "cellardooor/blank:latest"
 }
 
 variable "container_name" {
