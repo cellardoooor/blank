@@ -103,7 +103,3 @@ resource "yandex_alb_load_balancer" "main" {
     }
   }
 }
-
-resource "yandex_alb_target_group" "backend" {
-  name = "${var.environment}-backend-tg"
-}
