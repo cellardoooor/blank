@@ -43,7 +43,7 @@ resource "yandex_alb_backend_group" "main" {
     name             = "messenger-backend"
     weight           = 100
     port             = 8080
-    target_group_ids = [var.target_group_id]
+    target_group_ids = [yandex_alb_target_group.backend.id]
     healthcheck {
       timeout             = "10s"
       interval            = "5s"
@@ -102,4 +102,8 @@ resource "yandex_alb_load_balancer" "main" {
       }
     }
   }
+}
+
+resource "yandex_alb_target_group" "backend" {
+  name = "${var.environment}-backend-tg"
 }

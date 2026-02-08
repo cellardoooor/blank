@@ -46,3 +46,9 @@ variable "zone" {
   type        = string
   default     = "ru-central1-a"
 }
+
+variable "environment" {
+  description = "Environment name"
+  type        = string
+  default     = "dev"
+}
