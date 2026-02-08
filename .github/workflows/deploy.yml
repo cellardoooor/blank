@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image_sha_full: ${{ steps.sha.outputs.sha_tag_full }}
+      image_tag: ${{ steps.sha.outputs.sha_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,7 +48,7 @@ jobs:
           echo "sha_tag_full=${FULL_IMAGE}" >> $GITHUB_OUTPUT
           echo "Generated: ${FULL_IMAGE}"
 
-      - name: Verify outputs
+      - name: Verify outputs (debug)
         run: |
           echo "Output sha_tag: ${{ steps.sha.outputs.sha_tag }}"
           echo "Output sha_tag_full: ${{ steps.sha.outputs.sha_tag_full }}"
@@ -58,10 +59,6 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          
-      - name: Verify build output
-        run: |
-          echo "Received image_sha_full: '${{ needs.build.outputs.image_sha_full }}'"
 
   deploy:
     needs: build
@@ -69,6 +66,11 @@ jobs:
     environment: production
     
     steps:
+      - name: Debug build output
+        run: |
+          echo "Received image_sha_full: '${{ needs.build.outputs.image_sha_full }}'"
+          echo "Received image_tag: '${{ needs.build.outputs.image_tag }}'"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -81,7 +83,7 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           terraform init \
-            -backend-config="endpoints={s3=\"https://storage.yandexcloud.net\"}" \
+            -backend-config="endpoints={s3=\"https://storage.yandexcloud.net \"}" \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
             -backend-config="region=ru-central1" \
             -backend-config="key=dev/terraform.tfstate" \
