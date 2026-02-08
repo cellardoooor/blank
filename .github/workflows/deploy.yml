@@ -39,19 +39,29 @@ jobs:
       - name: Get SHA tag
         id: sha
         run: |
-          # Формируем sha-тег напрямую из GITHUB_SHA
           SHORT_SHA=${GITHUB_SHA::7}
           SHA_TAG="sha-${SHORT_SHA}"
+          FULL_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${SHA_TAG}"
           
-          echo "sha_tag=$SHA_TAG" >> $GITHUB_OUTPUT
-          echo "sha_tag_full=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$SHA_TAG" >> $GITHUB_OUTPUT
-          
+          echo "sha_tag=${SHA_TAG}" >> $GITHUB_OUTPUT
+          echo "sha_tag_full=${FULL_IMAGE}" >> $GITHUB_OUTPUT
+          echo "Generated: ${FULL_IMAGE}"
+
+      - name: Verify outputs
+        run: |
+          echo "Output sha_tag: ${{ steps.sha.outputs.sha_tag }}"
+          echo "Output sha_tag_full: ${{ steps.sha.outputs.sha_tag_full }}"
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          
+      - name: Verify build output
+        run: |
+          echo "Received image_sha_full: '${{ needs.build.outputs.image_sha_full }}'"
 
   deploy:
     needs: build
