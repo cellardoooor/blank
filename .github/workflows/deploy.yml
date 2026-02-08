@@ -97,6 +97,7 @@ jobs:
           TF_VAR_docker_image: ${{ needs.build.outputs.image_sha_full }}
           TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          TF_VAR_encryption_key: ${{ secrets.ENCRYPTION_KEY }}
           TF_VAR_jwt_duration: ${{ vars.JWT_DURATION }}
           TF_VAR_db_user: ${{ vars.DB_USER }}
           TF_VAR_db_name: ${{ vars.DB_NAME }}

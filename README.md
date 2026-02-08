@@ -7,7 +7,9 @@ Production-ready messenger backend on Go with PostgreSQL and WebSocket support.
 - REST API + WebSocket (real-time messaging)
 - JWT authentication
 - 1-to-1 messaging (no group chats)
-- Opaque message payloads (server doesn't interpret content)
+- **Message Encryption**: AES-256-GCM encryption for all messages in database
+- **Password Security**: bcrypt hashing for passwords
+- **Auto-migrations**: Database schema created automatically on startup
 - Stateless backend (ready for horizontal scaling)
 - Docker support
 - Terraform infrastructure for Yandex Cloud
@@ -160,7 +162,9 @@ Single workflow deployment (`.github/workflows/deploy.yml`):
 - `TF_STATE_BUCKET` - S3 bucket name for Terraform state
 - `JWT_SECRET` - JWT signing secret (generate with `openssl rand -base64 32`)
 - `DB_PASSWORD` - Managed PostgreSQL password
+- `ENCRYPTION_KEY` - Message encryption key (minimum 32 characters, generate with `openssl rand -base64 32`)
 - `YC_SERVICE_ACCOUNT_ID` - Service account for Instance Group (optional)
+- `DEFAULT_USER` / `DEFAULT_PASSWORD` - Default admin user credentials (optional)
 
 **Required Variables:**
 - `YC_CLOUD_ID` - Yandex Cloud ID
@@ -180,10 +184,12 @@ Single workflow deployment (`.github/workflows/deploy.yml`):
 |----------|-------------|---------|
 | `JWT_SECRET` | JWT signing secret | required |
 | `JWT_DURATION` | Token lifetime | `24h` |
+| `ENCRYPTION_KEY` | Message encryption key (min 32 chars) | required |
 | `DB_HOST` | Managed PostgreSQL host | required |
 | `DB_USER` | Database user | required |
 | `DB_PASSWORD` | Database password | required |
 | `DB_NAME` | Database name | required |
+| `DB_SSLMODE` | PostgreSQL SSL mode | `require` |
 
 ### Local Development Only
 
@@ -210,9 +216,10 @@ yc iam create-token
 - **Stateless**: JWT tokens only, no sessions
 - **Highly Available**: Min 2 VMs with auto-healing
 - **Scalable**: Instance Group with auto-scaling support
-- **Secure**: HTTPS with Let's Encrypt, SSL for database, restrictive security groups
+- **Secure**: HTTPS with Let's Encrypt, SSL for database, message encryption (AES-256-GCM), bcrypt passwords
 - **Zero-downtime**: Rolling updates via Instance Group
 - **Auto SSL**: Let's Encrypt certificates with automatic renewal (90 days)
+- **Auto-migrations**: Database tables created automatically on startup
 - **Frontend**: Custom Chicago font applied to all UI elements
 
 ## License

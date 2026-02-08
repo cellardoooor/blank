@@ -18,6 +18,7 @@ locals {
     db_sslmode           = var.db_sslmode
     default_user_b64     = base64encode(var.default_user)
     default_password_b64 = base64encode(var.default_password)
+    encryption_key_b64   = base64encode(var.encryption_key)
   })
 }
 

@@ -16,6 +16,7 @@ type Config struct {
 	DefaultUser     string
 	DefaultPassword string
 	CORSAllowed     []string
+	EncryptionKey   string
 }
 
 type DatabaseConfig struct {
@@ -51,6 +52,7 @@ func Load() *Config {
 			DBName:   getEnv("DB_NAME", ""),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
+		EncryptionKey: getEnv("ENCRYPTION_KEY", ""),
 	}
 }
 

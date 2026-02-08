@@ -123,6 +123,13 @@ variable "default_password" {
   default     = ""
 }
 
+variable "encryption_key" {
+  description = "Encryption key for message encryption (32+ characters)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "min_instances" {
   description = "Minimum number of instances"
   type        = number

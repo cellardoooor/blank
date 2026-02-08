@@ -9,6 +9,9 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 - REST API + WebSocket real-time messaging
 - JWT-based authentication (stateless, no server-side sessions)
 - 1-to-1 messaging (no group chats)
+- **Message Encryption**: AES-256-GCM encryption for all message payloads in database
+- **Password Security**: bcrypt hashing for user passwords
+- **Auto-migrations**: Database schema created automatically on application startup
 - Opaque message payloads (server treats as binary blobs)
 - Self-healing deployment with Docker Compose
 - Infrastructure as Code with Terraform
@@ -33,6 +36,7 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 - **Authentication**: JWT (github.com/golang-jwt/jwt/v5)
 - **WebSocket**: Gorilla WebSocket
 - **Password Hashing**: bcrypt (golang.org/x/crypto)
+- **Message Encryption**: AES-256-GCM (standard library crypto)
 - **UUID**: google/uuid
 
 ### 2.2 Frontend
@@ -62,18 +66,21 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 │   ├── auth/
 │   │   ├── service.go         # JWT token generation/validation + user validation (username 5-16 chars, password min 5)
 │   │   └── middleware.go      # HTTP auth middleware
-│   ├── config/config.go       # Configuration from env vars (includes DEFAULT_USER, DEFAULT_PASSWORD, DOMAIN)
+│   ├── config/config.go       # Configuration from env vars (includes DEFAULT_USER, DEFAULT_PASSWORD, DOMAIN, ENCRYPTION_KEY)
+│   ├── crypto/
+│   │   └── encryptor.go       # AES-256-GCM message encryption/decryption
 │   ├── http/handler.go        # HTTP REST handlers + new endpoints (/api/users, /api/conversations)
 │   ├── model/
 │   │   ├── user.go            # User entity
 │   │   └── message.go         # Message entity
 │   ├── service/
 │   │   ├── user.go            # User business logic + GetAll()
-│   │   └── message.go         # Message business logic + GetConversationPartners()
+│   │   └── message.go         # Message business logic + encryption/decryption
 │   ├── storage/
-│   │   ├── interfaces.go      # Repository interfaces (updated with GetAll, GetConversationPartners)
+│   │   ├── interfaces.go      # Repository interfaces
 │   │   └── postgres/          # PostgreSQL implementations
-│   │       └── storage.go     # Storage + UserRepo + MessageRepo (updated methods)
+│   │       ├── storage.go     # Storage + UserRepo + MessageRepo
+│   │       └── migration.go   # Automatic database migrations
 │   └── ws/
 │       ├── handler.go         # WebSocket HTTP handler (accepts all origins)
 │       └── hub.go             # WebSocket connection manager
@@ -82,9 +89,9 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 │   ├── app.js                 # JavaScript application (dynamic contacts, user filtering, optimistic messages)
 │   ├── style.css              # Styles (white bg, black text, Chicago font)
 │   └── fonts/                 # Chicago Regular font files
-├── migrations/
+├── migrations/                 # SQL migrations (for reference, auto-applied by app)
 │   ├── 001_init.sql           # Database schema
-│   └── 002_username_case_insensitive.sql  # Case-insensitive username index
+│   └── 002_username_case_insensitive.sql
 ├── terraform/                  # Infrastructure (ALB, Instance Group, Managed PostgreSQL)
 │   ├── network/               # VPC with 3 subnets (public, app, db)
 │   ├── alb/                   # Application Load Balancer with HTTPS
@@ -132,12 +139,13 @@ CREATE TABLE users (
 );
 
 CREATE INDEX idx_users_username ON users(username);
+CREATE UNIQUE INDEX idx_users_username_lower ON users(LOWER(username));
 
 CREATE TABLE messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     receiver_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    payload BYTEA NOT NULL,
+    payload BYTEA NOT NULL,  -- Encrypted with AES-256-GCM
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -145,6 +153,8 @@ CREATE INDEX idx_messages_sender ON messages(sender_id);
 CREATE INDEX idx_messages_receiver ON messages(receiver_id);
 CREATE INDEX idx_messages_created ON messages(created_at DESC);
 ```
+
+**Note**: Database migrations run automatically on application startup via `internal/storage/postgres/migration.go`
 
 ## 5. API Specification
 
@@ -379,6 +389,7 @@ Health check endpoint.
 | HTTP_ADDR | Server bind address | `:8080` | No |
 | JWT_SECRET | JWT signing key | - | Yes |
 | JWT_DURATION | Token lifetime | `24h` | No |
+| ENCRYPTION_KEY | Message encryption key (min 32 chars) | - | Yes |
 | DB_HOST | Managed PostgreSQL host | - | Yes |
 | DB_PORT | PostgreSQL port | `6432` | No |
 | DB_USER | PostgreSQL user | - | Yes |
@@ -388,6 +399,12 @@ Health check endpoint.
 | DOMAIN | Domain name for HTTPS | - | Yes |
 | DEFAULT_USER | Default username to create on startup | - | No |
 | DEFAULT_PASSWORD | Default password for default user | - | No |
+
+**Important**: `ENCRYPTION_KEY` must be:
+- At least 32 characters (will be padded/truncated to 32 bytes)
+- Same across all application instances
+- Stored securely (GitHub Secrets in CI/CD)
+- **Never lost** - loss of key = loss of access to messages
 
 ### 6.2 Default User Seeding
 If `DEFAULT_USER` and `DEFAULT_PASSWORD` are set:
@@ -407,14 +424,19 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 
 ### 7.1 Application Initialization (internal/app/app.go)
 1. Connect to **Yandex Managed PostgreSQL** (SSL required)
-2. Initialize repositories
-3. Create services (auth, user, message)
-4. Setup WebSocket hub
-5. Build HTTP router with middleware
-6. Add health check endpoint (for ALB)
-7. **Seed default user** if DEFAULT_USER/DEFAULT_PASSWORD configured
+2. **Run database migrations** - creates tables and indexes automatically
+3. Initialize encryptor for message encryption (AES-256-GCM)
+4. Initialize repositories
+5. Create services (auth, user, message with encryption)
+6. Setup WebSocket hub
+7. Build HTTP router with middleware
+8. Add health check endpoint (for ALB)
+9. **Seed default user** if DEFAULT_USER/DEFAULT_PASSWORD configured
 
-**Note**: Application now requires Managed PostgreSQL to start (no graceful degradation).
+**Note**: 
+- Application now requires Managed PostgreSQL to start (no graceful degradation)
+- Database schema is created automatically via migrations in `internal/storage/postgres/migration.go`
+- No need to run migration files manually
 
 ### 7.2 Authentication Service (internal/auth/service.go)
 - **Methods**:
@@ -449,17 +471,35 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 - Manages pgxpool.Pool
 - Provides User() and Message() repositories
 - Transaction support via WithTx()
+- **Auto-migrations**: `Migrate(ctx)` creates schema on startup
 
 **UserRepo**:
 - `Create(ctx, *User) error`
 - `GetByID(ctx, uuid) (*User, error)`
 - `GetByUsername(ctx, string) (*User, error)`
-- `GetAll(ctx) ([]User, error)` - NEW: returns all users for "New Chat" feature
+- `GetAll(ctx) ([]User, error)` - returns all users for "New Chat" feature
 
 **MessageRepo**:
 - `Create(ctx, *Message) error`
 - `GetByUserPair(ctx, user1, user2, limit, offset) ([]Message, error)`
-- `GetConversationPartners(ctx, userID) ([]uuid.UUID, error)` - NEW: returns IDs of users with conversations
+- `GetConversationPartners(ctx, userID) ([]uuid.UUID, error)` - returns IDs of users with conversations
+
+### 7.5 Message Encryption (internal/crypto/encryptor.go)
+**Encryptor struct**:
+- **Algorithm**: AES-256-GCM
+- **Key derivation**: Key is padded/truncated to 32 bytes for AES-256
+- **Encryption**: `Encrypt(plaintext []byte) (string, error)`
+  - Generates random nonce for each message
+  - Returns base64-encoded ciphertext
+- **Decryption**: `Decrypt(ciphertext string) ([]byte, error)`
+  - Extracts nonce from ciphertext
+  - Returns decrypted plaintext
+
+**Integration**:
+- Encryption happens in `MessageService.Send()` before saving to DB
+- Decryption happens in `MessageService.GetHistory()` and `GetChatList()` after reading from DB
+- Encrypted data is stored in `messages.payload` (BYTEA column)
+- Backward compatibility: decryption errors are silently ignored (for old unencrypted messages)
 
 ### 7.5 HTTP Handlers (internal/http/handler.go)
 - User registration/login with validation
@@ -833,76 +873,73 @@ Egress:
 | domain | string | - | Domain name for ALB |
 | cert_type | string | `letsencrypt` | Certificate type (letsencrypt/imported) |
 
-## 11. CI/CD Pipeline (Two-Stage)
+## 11. CI/CD Pipeline
 
 ### 11.1 Architecture
-Two separate pipelines for infrastructure and application:
+Single unified workflow for build and deployment (`.github/workflows/deploy.yml`):
 
-**Stage 1: Infrastructure Pipeline** (`.github/workflows/infrastructure.yml`)
-**Triggers**: Push в `terraform/**`, manual
-**Jobs**:
-1. **Terraform Init**: Initialize with S3 backend
-2. **Terraform Plan**: Preview infrastructure changes
-3. **Terraform Apply**: Deploy/Update infrastructure
-4. **Save Outputs**: Extract DB_HOST, ALB_IP, certificate status
-5. **Update GitHub Variables**: Save DB_HOST to repository variables
+**Triggers**: Push to `main` branch, manual (`workflow_dispatch`)
 
-**Stage 2: Application Pipeline** (`.github/workflows/application.yml`)
-**Triggers**: Push в код (не terraform), after infrastructure success
 **Jobs**:
-1. **Build**: Docker image build and push
-2. **Deploy**: Trigger Instance Group rolling update
+
+**Job 1: Build**
+1. Checkout code
+2. Setup Docker Buildx
+3. Login to Docker Hub
+4. Extract metadata and generate SHA tag
+5. Build and push Docker image with SHA tag
+
+**Job 2: Deploy** (depends on Build)
+1. Checkout code
+2. Setup Terraform
+3. Terraform Init with S3 backend
+4. Terraform Apply:
+   - Creates/updates all infrastructure (ALB, Instance Group, Managed PostgreSQL)
+   - Uses newly built Docker image
+   - Triggers rolling update automatically
 
 ### 11.2 Execution Order
-**First deployment:**
-1. Run `infrastructure.yml` - creates PostgreSQL, ALB, saves DB_HOST
-2. Wait for DNS propagation and certificate issuance
-3. Run `application.yml` - deploys app with correct DB_HOST
+**Every deployment:**
+1. Push to `main` triggers workflow
+2. Build job creates new Docker image with SHA tag
+3. Deploy job runs Terraform apply with new image
+4. Terraform detects image change and triggers rolling update
+5. Zero-downtime deployment complete
 
-**Subsequent deployments:**
-- Application code changes → `application.yml` only
-- Infrastructure changes → `infrastructure.yml` → triggers `application.yml`
+### 11.3 GitHub Actions Workflow
+**Workflow**: `.github/workflows/deploy.yml`
+- Single file handles both build and deployment
+- No separate infrastructure/application pipelines
+- Rolling updates happen automatically via Terraform Instance Group
+- Outputs: ALB_IP, domain, database_host, instance_count, certificate_status
 
-### 11.3 GitHub Actions Workflows
-**Infrastructure Workflow**:
-- Creates all cloud resources via Terraform
-- Outputs: DB_HOST, ALB_IP, certificate_status
-- Updates GitHub Variable: `DB_HOST`
-- Outputs DNS challenge records for Let's Encrypt
+### 11.4 Required Secrets
+| Secret | Description | How to Generate |
+|--------|-------------|-----------------|
+| `DOCKERHUB_USERNAME` | Docker Hub username | Docker Hub → Account Settings |
+| `DOCKERHUB_TOKEN` | Docker Hub access token | Docker Hub → Security → New Access Token |
+| `YC_TOKEN` | Yandex Cloud OAuth token | [Get YC_TOKEN](#getting-yc_token) |
+| `YC_S3_ACCESS_KEY` | S3 backend access key | [Create S3 Keys](#creating-s3-keys) |
+| `YC_S3_SECRET_KEY` | S3 backend secret key | [Create S3 Keys](#creating-s3-keys) |
+| `TF_STATE_BUCKET` | Terraform state bucket name | Create unique bucket name |
+| `JWT_SECRET` | JWT signing secret | `openssl rand -base64 32` |
+| `DB_PASSWORD` | Managed PostgreSQL password | Strong password (12+ chars) |
+| `ENCRYPTION_KEY` | Message encryption key | `openssl rand -base64 32` (min 32 chars) |
+| `YC_SERVICE_ACCOUNT_ID` | Service account for Instance Group | [Create Service Account](#service-account) |
+| `DEFAULT_USER` | Default admin username | Optional, e.g., `admin` |
+| `DEFAULT_PASSWORD` | Default admin password | Optional, e.g., `admin123` |
 
-**Application Workflow**:
-- Verifies DB_HOST variable is set
-- Builds Docker image
-- Triggers rolling update on Instance Group
-- Uses DB_HOST from GitHub Variables
-
-### 11.2 Required Secrets
-- `DOCKERHUB_USERNAME` - Docker Hub username
-- `DOCKERHUB_TOKEN` - Docker Hub access token
-- `YC_TOKEN` - Yandex Cloud OAuth token
-- `YC_S3_ACCESS_KEY` - S3 backend access key
-- `YC_S3_SECRET_KEY` - S3 backend secret key
-- `TF_STATE_BUCKET` - Terraform state bucket name
-- `JWT_SECRET` - JWT signing secret
-- `DB_PASSWORD` - Managed PostgreSQL password
-- `DEFAULT_USER` - Default username for seeding
-- `DEFAULT_PASSWORD` - Default password for seeding
-
-### 11.4 Required Variables (Manual)
-- `YC_CLOUD_ID` - Yandex Cloud ID
-- `YC_FOLDER_ID` - Yandex Folder ID
-- `DOMAIN` - Domain name for application (e.g., messenger.example.com)
-- `DB_PORT` - PostgreSQL port (default: 6432)
-- `DB_USER` - PostgreSQL username
-- `DB_NAME` - PostgreSQL database name
-- `DB_SSLMODE` - SSL mode (default: require)
-- `HTTP_ADDR` - Server bind address (default: :8080)
-- `JWT_DURATION` - Token lifetime (default: 24h)
-- `MIN_INSTANCES` - Minimum VM count (default: 2)
-- `MAX_INSTANCES` - Maximum VM count (default: 4)
-
-### 11.5 Auto-Generated Variables
-- `DB_HOST` - Managed PostgreSQL host (auto-set by Infrastructure pipeline)
+### 11.5 Required Variables (GitHub Variables)
+| Variable | Description | Default Value |
+|----------|-------------|---------------|
+| `YC_CLOUD_ID` | Yandex Cloud ID | - |
+| `YC_FOLDER_ID` | Yandex Folder ID | - |
+| `DOMAIN` | Domain name (e.g., messenger.example.com) | - |
+| `DB_USER` | PostgreSQL username | `messenger` |
+| `DB_NAME` | PostgreSQL database name | `messenger` |
+| `JWT_DURATION` | Token lifetime | `24h` |
+| `MIN_INSTANCES` | Minimum VM count | `2` |
+| `MAX_INSTANCES` | Maximum VM count | `4` |
 
 ## 12. Dependencies
 
@@ -964,6 +1001,14 @@ golang.org/x/crypto v0.18.0
 - bcrypt password hashing (adaptive cost)
 - No sensitive data in JWT payload
 - **Validation**: Username 5-16 chars, password min 5 chars
+
+### 14.2 Message Encryption
+- **Algorithm**: AES-256-GCM
+- **Key Management**: 32-byte key from `ENCRYPTION_KEY` environment variable
+- **Storage**: All message payloads encrypted before saving to PostgreSQL
+- **Transmission**: HTTPS/WSS for data in transit
+- **At Rest**: Encrypted in database (BYTEA column)
+- **Backwards Compatible**: Old unencrypted messages gracefully handled
 
 ### 14.2 Database
 - Prepared statements via pgx (SQL injection protection)
@@ -1180,11 +1225,24 @@ When modifying this project, maintain:
 
 ---
 
-**Version**: 2.0
-**Last Updated**: 2026-02-05
+**Version**: 2.2
+**Last Updated**: 2026-02-08
 **Maintainer**: AI Assistant
 
 ## Changelog
+
+### Version 2.2 (2026-02-08) - Message Encryption & Auto-migrations
+- **Message Encryption**: AES-256-GCM encryption for all message payloads
+  - **Algorithm**: AES-256-GCM with random nonce per message
+  - **Storage**: Encrypted data stored in PostgreSQL BYTEA column
+  - **Key Management**: 32-byte key from `ENCRYPTION_KEY` environment variable
+  - **Backward Compatible**: Graceful handling of old unencrypted messages
+- **Automatic Database Migrations**: Schema created on application startup
+  - **Location**: `internal/storage/postgres/migration.go`
+  - **Tables**: users, messages with all indexes
+  - **No Manual Steps**: Migrations run automatically, no SQL files to execute
+- **CI/CD Updates**: Added `ENCRYPTION_KEY` to GitHub Secrets
+- **Documentation**: Updated all docs with encryption and migration details
 
 ### Version 2.1 (2026-02-05) - Automatic SSL Certificates
 - **Let's Encrypt Integration**: Automatic SSL certificate provisioning
