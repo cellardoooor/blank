@@ -39,10 +39,13 @@ jobs:
       - name: Get SHA tag
         id: sha
         run: |
-          SHA_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep -o 'sha-[a-f0-9]\+' | head -1)
+          # Формируем sha-тег напрямую из GITHUB_SHA
+          SHORT_SHA=${GITHUB_SHA::7}
+          SHA_TAG="sha-${SHORT_SHA}"
+          
           echo "sha_tag=$SHA_TAG" >> $GITHUB_OUTPUT
           echo "sha_tag_full=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$SHA_TAG" >> $GITHUB_OUTPUT
-
+          
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
