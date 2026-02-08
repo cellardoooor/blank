@@ -40,6 +40,11 @@ func (a *App) Init(ctx context.Context) error {
 	} else {
 		a.storage = pgStorage
 		log.Println("database connected")
+		
+		// Run database migrations
+		if err := a.storage.Migrate(ctx); err != nil {
+			log.Printf("warning: database migration failed: %v", err)
+		}
 	}
 
 	// Initialize services with storage (may be nil)
