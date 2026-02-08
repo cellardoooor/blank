@@ -26,13 +26,6 @@ resource "terraform_data" "replacement" {
   input = var.docker_image
 }
 
-# ALB Target Group - created explicitly instead of auto-generated
-resource "yandex_alb_target_group" "backend" {
-  name = "${var.instance_group_name}-tg"
-
-  # Targets will be added automatically by Instance Group
-}
-
 # Instance Group for high availability and auto-scaling
 resource "yandex_compute_instance_group" "main" {
   name               = var.instance_group_name
@@ -94,9 +87,9 @@ resource "yandex_compute_instance_group" "main" {
   # Note: Health check is managed by ALB backend group only
   # Do not add health_check block here - it conflicts with ALB health checks
 
-  # Use explicitly created target group
+  # Create ALB target group automatically (Yandex Cloud doesn't allow external target_group_id)
   application_load_balancer {
-    target_group_id = yandex_alb_target_group.backend.id
+    # Target group will be created automatically by Instance Group
   }
 
   lifecycle {
