@@ -93,7 +93,7 @@ resource "yandex_compute_instance_group" "main" {
   }
 
   lifecycle {
-    create_before_destroy = true
+    create_before_destroy = false
     replace_triggered_by = [
       terraform_data.replacement
     ]
