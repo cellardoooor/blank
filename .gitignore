@@ -58,3 +58,4 @@ postgres_data/
 # Build artifacts
 dist/
 build/
+.aider*
