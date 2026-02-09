@@ -36,11 +36,11 @@ func (h *Handler) Router() *mux.Router {
 	r.HandleFunc("/api/health", h.healthCheck).Methods("GET", "OPTIONS")
 	r.HandleFunc("/api/auth/register", h.register).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/auth/login", h.login).Methods("POST", "OPTIONS")
-	r.HandleFunc("/api/auth/change-password", h.changePassword).Methods("POST", "OPTIONS")
 
 	api := r.PathPrefix("/api").Subrouter()
 	api.Use(auth.Middleware(h.authService))
 	api.HandleFunc("/me", h.getCurrentUser).Methods("GET")
+	api.HandleFunc("/auth/change-password", h.changePassword).Methods("POST", "OPTIONS")
 	api.HandleFunc("/users", h.listUsers).Methods("GET")
 	api.HandleFunc("/users/{id}", h.getUser).Methods("GET")
 	api.HandleFunc("/conversations", h.getConversations).Methods("GET")

@@ -92,13 +92,6 @@ async function login() {
         token = data.token;
         localStorage.setItem('token', token);
         
-        const meRes = await apiRequest('/me');
-        if (meRes.ok) {
-            const me = await meRes.json();
-            userId = me.id;
-            localStorage.setItem('userId', userId);
-        }
-        
         await initApp();
     } catch (e) {
         errorEl.textContent = 'Network error: ' + e.message;
@@ -132,13 +125,6 @@ async function register() {
         token = data.token;
         localStorage.setItem('token', token);
         
-        const meRes = await apiRequest('/me');
-        if (meRes.ok) {
-            const me = await meRes.json();
-            userId = me.id;
-            localStorage.setItem('userId', userId);
-        }
-        
         await initApp();
     } catch (e) {
         errorEl.textContent = 'Network error: ' + e.message;
@@ -169,6 +155,16 @@ async function initApp() {
     try {
         document.getElementById('auth-section').style.display = 'none';
         document.getElementById('chat-section').style.display = 'flex';
+        
+        // Load current user info
+        const meRes = await apiRequest('/me');
+        if (meRes.ok) {
+            const me = await meRes.json();
+            currentUser = me;
+            userId = me.id;
+            localStorage.setItem('userId', userId);
+            document.getElementById('current-user').textContent = me.username;
+        }
         
         // Load chats
         await loadChats();
