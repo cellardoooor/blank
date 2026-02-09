@@ -14,6 +14,12 @@ type contextKey struct{}
 func Middleware(authService *Service) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip OPTIONS requests (CORS preflight)
+			if r.Method == "OPTIONS" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			token := extractToken(r)
 			if token == "" {
 				http.Error(w, `{"error":"authorization required"}`, http.StatusUnauthorized)

@@ -33,12 +33,6 @@ async function apiRequest(endpoint, options = {}) {
 
     try {
         const res = await fetch(`${API_URL}${endpoint}`, { ...defaultOptions, ...options });
-
-        if (res.status === 401) {
-            logout();
-            throw new Error('Unauthorized');
-        }
-
         return res;
     } catch (e) {
         if (e.name === 'AbortError') {
@@ -158,6 +152,10 @@ async function initApp() {
         
         // Load current user info
         const meRes = await apiRequest('/me');
+        if (meRes.status === 401) {
+            logout();
+            return;
+        }
         if (meRes.ok) {
             const me = await meRes.json();
             currentUser = me;
@@ -242,6 +240,11 @@ function handleIncomingMessage(msg) {
 async function loadChats() {
     try {
         const res = await apiRequest('/chats');
+        
+        if (res.status === 401) {
+            logout();
+            return;
+        }
         
         if (!res.ok) {
             throw new Error('Failed to load chats: ' + res.statusText);
@@ -621,6 +624,12 @@ async function changePassword() {
                 new_password: newPassword
             })
         });
+        
+        if (res.status === 401) {
+            errorEl.textContent = 'Session expired. Please login again.';
+            setTimeout(() => logout(), 2000);
+            return;
+        }
         
         if (!res.ok) {
             const data = await res.json();
