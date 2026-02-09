@@ -131,3 +131,37 @@ func (s *Service) Login(ctx context.Context, username, password string) (string,
 
 	return s.GenerateToken(user.ID)
 }
+
+func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error {
+	if s.userRepo == nil {
+		return fmt.Errorf("database unavailable")
+	}
+
+	// Validate new password length
+	if len(newPassword) < 5 {
+		return fmt.Errorf("new password must be at least 5 characters")
+	}
+
+	// Get user
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return fmt.Errorf("user not found")
+	}
+
+	// Verify old password
+	if !s.CheckPassword(oldPassword, user.PasswordHash) {
+		return fmt.Errorf("current password is incorrect")
+	}
+
+	// Hash new password
+	newHash, err := s.HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+
+	// Update password
+	return s.userRepo.UpdatePassword(ctx, userID, newHash)
+}

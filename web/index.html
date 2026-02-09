@@ -25,17 +25,20 @@
             <div id="sidebar">
                 <div id="sidebar-header">
                     <h3 id="sidebar-title">Chats</h3>
-                    <button onclick="showNewChatModal()" id="new-chat-btn" title="New Chat">+</button>
+                    <button onclick="showNewChatModal()" id="new-chat-btn">New Chat</button>
                 </div>
                 <div id="contacts-list">
-                    <!-- Chat items will be rendered here -->
-                    <div id="empty-chat-btn-container" style="display: none;">
-                        <button onclick="showNewChatModal()" class="btn-primary">New Chat</button>
+                    <div id="empty-state-container" style="display: none; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 40px;">
+                        <p style="color: #666666; margin-bottom: 16px;">No chats yet</p>
+                        <button onclick="showNewChatModal()" class="btn-secondary" style="width: auto;">Start New Chat</button>
                     </div>
                 </div>
                 <div id="sidebar-footer">
                     <span id="current-user">User</span>
-                    <button onclick="logout()" id="logout-btn">Logout</button>
+                    <div id="footer-buttons">
+                        <button onclick="showChangePasswordModal()" id="change-pwd-btn">Change Password</button>
+                        <button onclick="logout()" id="logout-btn">Logout</button>
+                    </div>
                 </div>
             </div>
 
@@ -71,15 +74,38 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>New Chat</h3>
-                <button onclick="closeNewChatModal()" class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
+                <label for="new-chat-username" class="input-label">Username</label>
                 <input type="text" id="new-chat-username" placeholder="Enter username" autocomplete="off">
                 <div id="new-chat-error" class="error-message"></div>
             </div>
             <div class="modal-footer">
-                <button onclick="createChatByUsername()" class="btn-primary">Create Chat</button>
+                <button onclick="createChatByUsername()" class="btn-secondary">Create Chat</button>
                 <button onclick="closeNewChatModal()" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="change-password-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Change Password</h3>
+            </div>
+            <div class="modal-body">
+                <label for="old-password" class="input-label">Current Password</label>
+                <input type="password" id="old-password" placeholder="Enter current password" autocomplete="off">
+                <label for="new-password" class="input-label">New Password</label>
+                <input type="password" id="new-password" placeholder="Enter new password (min 5 characters)" autocomplete="off">
+                <label for="confirm-password" class="input-label">Confirm New Password</label>
+                <input type="password" id="confirm-password" placeholder="Confirm new password" autocomplete="off">
+                <div id="change-password-error" class="error-message"></div>
+                <div id="change-password-success" class="success-message"></div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="changePassword()" class="btn-secondary">Change</button>
+                <button onclick="closeChangePasswordModal()" class="btn-secondary">Cancel</button>
             </div>
         </div>
     </div>

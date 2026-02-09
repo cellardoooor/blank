@@ -315,30 +315,27 @@ async function fetchUserInfo(userId) {
 
 function renderChatList() {
     const container = document.getElementById('contacts-list');
-    const btnContainer = document.getElementById('empty-chat-btn-container');
-    
-    // Get button element if btnContainer exists
-    const btn = btnContainer ? btnContainer.querySelector('button') : null;
+    const emptyContainer = document.getElementById('empty-state-container');
     
     // Sort chats by last message time (newest first)
     const sortedChats = Array.from(chats.values()).sort((a, b) => {
         return b.lastMessageTime - a.lastMessageTime;
     });
     
-    // Clear container
+    // Clear container (but keep empty state container)
     container.innerHTML = '';
     
     if (sortedChats.length === 0) {
-        if (btnContainer) {
-            btnContainer.style.display = 'flex';
-            container.appendChild(btnContainer);
+        if (emptyContainer) {
+            emptyContainer.style.display = 'flex';
+            container.appendChild(emptyContainer);
         }
         return;
     }
     
-    // Hide button when there are chats
-    if (btnContainer) {
-        btnContainer.style.display = 'none';
+    // Hide empty state when there are chats
+    if (emptyContainer) {
+        emptyContainer.style.display = 'none';
     }
     
     sortedChats.forEach(chat => {
@@ -571,6 +568,87 @@ function startNewChat(userId, username) {
     renderChatList();
 }
 
+// ==================== CHANGE PASSWORD MODAL ====================
+
+function showChangePasswordModal() {
+    const modal = document.getElementById('change-password-modal');
+    modal.classList.add('active');
+    document.getElementById('old-password').value = '';
+    document.getElementById('new-password').value = '';
+    document.getElementById('confirm-password').value = '';
+    document.getElementById('change-password-error').textContent = '';
+    document.getElementById('change-password-success').textContent = '';
+    document.getElementById('old-password').focus();
+}
+
+function closeChangePasswordModal() {
+    document.getElementById('change-password-modal').classList.remove('active');
+}
+
+async function changePassword() {
+    const oldPassword = document.getElementById('old-password').value;
+    const newPassword = document.getElementById('new-password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
+    const errorEl = document.getElementById('change-password-error');
+    const successEl = document.getElementById('change-password-success');
+    
+    errorEl.textContent = '';
+    successEl.textContent = '';
+    
+    // Validation
+    if (!oldPassword) {
+        errorEl.textContent = 'Current password is required';
+        return;
+    }
+    
+    if (!newPassword) {
+        errorEl.textContent = 'New password is required';
+        return;
+    }
+    
+    if (newPassword.length < 5) {
+        errorEl.textContent = 'New password must be at least 5 characters';
+        return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+        errorEl.textContent = 'Passwords do not match';
+        return;
+    }
+    
+    try {
+        const res = await apiRequest('/auth/change-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                old_password: oldPassword,
+                new_password: newPassword
+            })
+        });
+        
+        if (!res.ok) {
+            const data = await res.json();
+            errorEl.textContent = data.error || 'Failed to change password';
+            return;
+        }
+        
+        successEl.textContent = 'Password changed successfully';
+        
+        // Clear fields
+        document.getElementById('old-password').value = '';
+        document.getElementById('new-password').value = '';
+        document.getElementById('confirm-password').value = '';
+        
+        // Close modal after 1.5 seconds
+        setTimeout(() => {
+            closeChangePasswordModal();
+        }, 1500);
+        
+    } catch (e) {
+        errorEl.textContent = 'Network error: ' + e.message;
+    }
+}
+
 // ==================== UTILITY FUNCTIONS ====================
 
 function formatChatListTime(date) {
@@ -657,21 +735,46 @@ function setupEventListeners() {
         });
     }
     
-    // Close modal on outside click
-    const modal = document.getElementById('new-chat-modal');
-    if (modal) {
-        modal.addEventListener('click', function(e) {
+    // Enter key listener for change password inputs
+    const oldPasswordInput = document.getElementById('old-password');
+    const newPasswordInput = document.getElementById('new-password');
+    const confirmPasswordInput = document.getElementById('confirm-password');
+    
+    [oldPasswordInput, newPasswordInput, confirmPasswordInput].forEach(input => {
+        if (input) {
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    changePassword();
+                }
+            });
+        }
+    });
+    
+    // Close modals on outside click
+    const newChatModal = document.getElementById('new-chat-modal');
+    if (newChatModal) {
+        newChatModal.addEventListener('click', function(e) {
             if (e.target === this) {
                 closeNewChatModal();
             }
         });
     }
     
+    const changePasswordModal = document.getElementById('change-password-modal');
+    if (changePasswordModal) {
+        changePasswordModal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeChangePasswordModal();
+            }
+        });
+    }
+    
     // Keyboard shortcuts
     document.addEventListener('keydown', function(e) {
-        // Escape to close modal
+        // Escape to close modals
         if (e.key === 'Escape') {
             closeNewChatModal();
+            closeChangePasswordModal();
         }
     });
 }

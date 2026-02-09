@@ -12,6 +12,7 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*model.User, error)
 	GetByUsername(ctx context.Context, username string) (*model.User, error)
 	GetAll(ctx context.Context) ([]model.User, error)
+	UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error
 }
 
 type MessageRepository interface {

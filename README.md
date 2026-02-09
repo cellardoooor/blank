@@ -97,6 +97,7 @@ Internet
 |--------|----------|------|-------------|
 | POST | /api/auth/register | No | User registration |
 | POST | /api/auth/login | No | User login |
+| POST | /api/auth/change-password | Yes | Change password |
 | GET | /api/users/{id} | Yes | Get user info |
 | POST | /api/messages | Yes | Send message |
 | GET | /api/messages/{user_id} | Yes | Get message history |

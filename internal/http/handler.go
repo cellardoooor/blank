@@ -36,6 +36,7 @@ func (h *Handler) Router() *mux.Router {
 	r.HandleFunc("/api/health", h.healthCheck).Methods("GET", "OPTIONS")
 	r.HandleFunc("/api/auth/register", h.register).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/auth/login", h.login).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/auth/change-password", h.changePassword).Methods("POST", "OPTIONS")
 
 	api := r.PathPrefix("/api").Subrouter()
 	api.Use(auth.Middleware(h.authService))
@@ -311,4 +312,37 @@ func (h *Handler) getMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, apiMessages)
+}
+
+type ChangePasswordRequest struct {
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}
+
+func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	var req ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+
+	if req.OldPassword == "" || req.NewPassword == "" {
+		respondError(w, http.StatusBadRequest, "old and new password required")
+		return
+	}
+
+	if len(req.NewPassword) < 5 {
+		respondError(w, http.StatusBadRequest, "new password must be at least 5 characters")
+		return
+	}
+
+	err := h.authService.ChangePassword(r.Context(), userID, req.OldPassword, req.NewPassword)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "password changed successfully"})
 }

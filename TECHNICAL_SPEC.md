@@ -222,6 +222,30 @@ Authenticate user.
 }
 ```
 
+#### POST /api/auth/change-password
+Change user password (requires auth).
+```json
+// Request
+{
+  "old_password": "string",
+  "new_password": "string"    // Minimum 5 characters
+}
+
+// Response 200
+{
+  "message": "password changed successfully"
+}
+
+// Response 400
+{
+  "error": "current password is incorrect"
+}
+// or
+{
+  "error": "new password must be at least 5 characters"
+}
+```
+
 #### GET /api/users
 Get list of all users or search by username (requires auth). Used for "New Chat" functionality.
 ```json
@@ -553,7 +577,7 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 5. Send: JSON with receiver_id and payload array
 
 ### 8.5 Chat List (Left Sidebar)
-- **Header**: "Chats" title + "+" button for new chat
+- **Header**: "Chats" title + "New Chat" button (white background, black text, black border)
 - **Chat Items** (sorted by last message time, newest first):
   - Avatar circle with first letter of username
   - Username (bold)
@@ -562,8 +586,8 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
     - Today: "HH:MM" (e.g., "15:30")
     - Yesterday: "Yesterday"
     - Older: "MMM DD" (e.g., "Feb 28")
-- **Empty List**: When no chats exist, shows "New Chat" button at bottom
-- **Footer**: Current user name + Logout button
+- **Empty List**: When no chats exist, shows "No chats yet" message + "Start New Chat" button
+- **Footer**: Current user name + "Change Password" button + "Logout" button
 
 ### 8.6 Chat Window (Right Panel)
 - **Header**: Avatar + Username + Status
@@ -583,8 +607,8 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
   - "New Chat" button displayed at bottom of contacts list when empty
 
 ### 8.7 New Chat Modal
-1. Click "+" button in sidebar
-2. Modal opens with single username input field
+1. Click "New Chat" button in sidebar header
+2. Modal opens with single username input field (no close button)
 3. User types username and:
    - Presses Enter key, OR
    - Clicks "Create Chat" button
@@ -594,9 +618,29 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
    - If user exists: Create new chat and open it
    - If chat already exists with user: Open existing chat
 5. Errors displayed below input in black text
-6. "Cancel" button closes modal without action
+6. Buttons: "Create Chat" and "Cancel" (both white bg, black border, black text)
+7. No close (×) button - use Cancel or click outside to close
 
-### 8.8 Timezone & Localization
+### 8.8 Change Password Modal
+1. Click "Change Password" button in sidebar footer
+2. Modal opens with three password input fields (no close button):
+   - **Current Password**: placeholder "Enter current password"
+   - **New Password**: placeholder "Enter new password (min 5 characters)"
+   - **Confirm New Password**: placeholder "Confirm new password"
+3. User fills fields and:
+   - Presses Enter key in any field, OR
+   - Clicks "Change" button
+4. Validation (errors in black text):
+   - "Current password is required" - if old password empty
+   - "New password is required" - if new password empty
+   - "New password must be at least 5 characters" - if too short
+   - "Passwords do not match" - if confirm doesn't match
+   - "Current password is incorrect" - if old password wrong (from server)
+5. Success: Show "Password changed successfully" and auto-close after 1.5 seconds
+6. Buttons: "Change" and "Cancel" (both white bg, black border, black text)
+7. No close (×) button - use Cancel or click outside to close
+
+### 8.9 Timezone & Localization
 - All timestamps converted to browser's local time
 - Uses `Intl.DateTimeFormat` for formatting
 - English only for all UI text
@@ -1224,11 +1268,28 @@ When modifying this project, maintain:
 
 ---
 
-**Version**: 2.2
+**Version**: 2.3
 **Last Updated**: 2026-02-09
 **Maintainer**: AI Assistant
 
 ## Changelog
+
+### Version 2.3 (2026-02-09) - UI Improvements & Change Password
+- **Change Password Feature**: Users can now change their password
+  - **New Endpoint**: `POST /api/auth/change-password`
+  - **Modal UI**: Three-field form (current, new, confirm)
+  - **Validation**: Minimum 5 characters, password match check
+- **UI Redesign**:
+  - **Sidebar Header**: "+" replaced with "New Chat" text button (white bg, black text)
+  - **Sidebar Footer**: Added "Change Password" button next to "Logout"
+  - **Modals**: Removed close (×) buttons, all buttons now white bg with black border
+  - **Empty State**: Redesigned with "No chats yet" message
+  - **Consistent Styling**: All secondary buttons have matching style
+- **New Files**:
+  - `internal/http/handler.go`: changePassword handler
+  - `internal/auth/service.go`: ChangePassword method
+  - `internal/storage/postgres/storage.go`: UpdatePassword method
+  - `internal/storage/interfaces.go`: UpdatePassword interface method
 
 ### Version 2.2 (2026-02-09) - Embedded Database Migrations
 - **Automatic Migrations**: Database migrations now run automatically on application startup

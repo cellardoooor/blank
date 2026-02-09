@@ -130,6 +130,13 @@ func (r *UserRepo) GetAll(ctx context.Context) ([]model.User, error) {
 	return users, rows.Err()
 }
 
+func (r *UserRepo) UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error {
+	conn := getConn(ctx, r.pool)
+	sql := `UPDATE users SET password_hash = $1 WHERE id = $2`
+	_, err := conn.Exec(ctx, sql, passwordHash, id)
+	return err
+}
+
 type MessageRepo struct {
 	pool *pgxpool.Pool
 }
