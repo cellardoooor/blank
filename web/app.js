@@ -23,16 +23,15 @@ let messagesMap = new Map(); // userId -> messages array
 const API_URL = '/api';
 
 async function apiRequest(endpoint, options = {}) {
-    const defaultOptions = {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            ...options.headers
-        },
-        signal: AbortSignal.timeout(10000)
-    };
-
     try {
-        const res = await fetch(`${API_URL}${endpoint}`, { ...defaultOptions, ...options });
+        const res = await fetch(`${API_URL}${endpoint}`, {
+            ...options,
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                ...options.headers
+            },
+            signal: options.signal || AbortSignal.timeout(10000)
+        });
         return res;
     } catch (e) {
         if (e.name === 'AbortError') {
@@ -730,6 +729,20 @@ function setupInputResize() {
 
 // Setup all event listeners when DOM is ready
 function setupEventListeners() {
+    // Enter key listener for login inputs
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    
+    [usernameInput, passwordInput].forEach(input => {
+        if (input) {
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    login();
+                }
+            });
+        }
+    });
+    
     // Enter key listener for new chat username input
     const newChatInput = document.getElementById('new-chat-username');
     if (newChatInput) {
