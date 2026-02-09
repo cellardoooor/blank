@@ -44,6 +44,7 @@ resource "yandex_alb_backend_group" "main" {
     weight           = 100
     port             = 8080
     target_group_ids = [var.target_group_id]
+    enable_websocket = true
     healthcheck {
       timeout             = "10s"
       interval            = "5s"

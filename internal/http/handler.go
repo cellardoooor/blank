@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -95,7 +96,7 @@ func (h *Handler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 func extractToken(r *http.Request) string {
 	bearer := r.Header.Get("Authorization")
-	if len(bearer) > 7 && (bearer[:7] == "Bearer " || bearer[:7] == "bearer ") {
+	if len(bearer) > 7 && strings.EqualFold(bearer[:7], "Bearer ") {
 		return bearer[7:]
 	}
 	return ""
