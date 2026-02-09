@@ -152,15 +152,24 @@ body {
     border-right: 1px solid #e0e0e0;
     display: flex;
     flex-direction: column;
+    overflow: hidden; /* Ensure sidebar doesn't overflow screen */
 }
 
 #sidebar-header {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between; /* Space between logo and button */
     align-items: center;
-    padding: 16px 20px;
+    padding: 12px 20px; /* Aligned with chat-header padding */
     border-bottom: 1px solid #e0e0e0;
     background: #ffffff;
+    flex-shrink: 0; /* Prevent shrinking */
+    height: 57px; /* Explicit height to match chat-header approx */
+}
+
+#logo-icon {
+    height: 24px;
+    width: auto;
+    vertical-align: middle;
 }
 
 #sidebar-title {
@@ -194,8 +203,9 @@ body {
 
 #contacts-list {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: auto; /* Scroll enabled */
     background: #ffffff;
+    min-height: 0; /* Fix for flex overflow */
 }
 
 .chat-item {
@@ -261,9 +271,10 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 16px;
+    padding: 12px 20px; /* Aligned with input-area padding */
     border-top: 1px solid #e0e0e0;
     background: #ffffff;
+    flex-shrink: 0; /* Prevent shrinking */
 }
 
 #current-user {
