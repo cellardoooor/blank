@@ -8,6 +8,7 @@ import (
 
 	"messenger/internal/auth"
 	"messenger/internal/config"
+	"messenger/internal/crypto"
 	httphandlers "messenger/internal/http"
 	"messenger/internal/service"
 	"messenger/internal/storage"
@@ -56,9 +57,15 @@ func (a *App) Init(ctx context.Context, migrationsFS fs.FS) error {
 		messageRepo = pgStorage.Message()
 	}
 
+	// Initialize encryptor for message encryption
+	encryptor, err := crypto.NewEncryptor(a.config.EncryptionKey)
+	if err != nil {
+		log.Printf("warning: failed to initialize encryptor: %v", err)
+	}
+
 	authService := auth.NewService(userRepo, a.config.JWTSecret, a.config.JWTDuration)
 	userService := service.NewUserService(userRepo)
-	messageService := service.NewMessageService(messageRepo, userRepo)
+	messageService := service.NewMessageService(messageRepo, userRepo, encryptor)
 
 	// Create default user if configured
 	if a.config.DefaultUser != "" && a.config.DefaultPassword != "" {

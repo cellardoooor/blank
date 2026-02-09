@@ -23,6 +23,7 @@ Internet
 │  • Container-Optimized OS           │
 │  • Auto-healing                     │
 │  • Rolling updates (zero-downtime)  │
+│  • NAT Gateway (Internet access)    │
 └──────────────┬──────────────────────┘
                | PostgreSQL (6432) + SSL
                v
@@ -38,13 +39,14 @@ Internet
 ## Сетевая сегментация
 
 - **Public subnet (10.0.1.0/24)**: Application Load Balancer
-- **App subnet (10.0.2.0/24)**: Instance Group (VM с приложением)
+- **App subnet (10.0.2.0/24)**: Instance Group (VM с приложением) + NAT Gateway
 - **DB subnet (10.0.3.0/24)**: Managed PostgreSQL
 
 **Security Groups:**
 - PostgreSQL доступен только из App subnet (порт 6432)
 - Приложение доступно только из ALB (порт 8080)
 - ALB доступен из интернета (порты 80, 443)
+- NAT Gateway позволяет VM выходить в интернет (Docker pull, обновления)
 
 ## Подготовка
 
@@ -64,7 +66,15 @@ Internet
 | `TF_STATE_BUCKET` | Имя S3 bucket для state | Придумай уникальное имя |
 | `JWT_SECRET` | Секретный ключ для JWT токенов | `openssl rand -base64 32` |
 | `DB_PASSWORD` | Пароль для Managed PostgreSQL | Придумай сильный пароль (минимум 12 символов) |
+| `ENCRYPTION_KEY` | Ключ для шифрования сообщений | `openssl rand -base64 32` (минимум 32 символа) |
 | `YC_SERVICE_ACCOUNT_ID` | ID сервисного аккаунта для Instance Group | См. раздел [Сервисный аккаунт](#сервисный-аккаунт-для-instance-group) |
+| `DEFAULT_USER` | Логин админа по умолчанию | Например: `admin` |
+| `DEFAULT_PASSWORD` | Пароль админа по умолчанию | Например: `admin123` |
+
+⚠️ **Важно**: `ENCRYPTION_KEY` должен быть:
+- Минимум 32 символа (будет дополнен/обрезан до 32 байт)
+- Одинаковым на всех инстансах приложения
+- **Никогда не теряться** - потеря ключа = потеря доступа ко всем сообщениям!
 
 #### GitHub Variables (открытые значения)
 
@@ -73,12 +83,18 @@ Internet
 | `YC_CLOUD_ID` | ID облака Yandex | См. раздел [Получение Cloud/Folder ID](#получение-cloud_id-и-folder_id) | - |
 | `YC_FOLDER_ID` | ID каталога Yandex | См. раздел [Получение Cloud/Folder ID](#получение-cloud_id-и-folder_id) | - |
 | `DOMAIN` | Домен для HTTPS | Например: messenger.example.com | - |
-| `HTTP_ADDR` | Порт приложения | Можно оставить `:8080` | `:8080` |
 | `JWT_DURATION` | Время жизни токена | Можно оставить `24h` | `24h` |
 | `DB_USER` | Пользователь БД | Например: messenger | messenger |
 | `DB_NAME` | Имя базы данных | Например: messenger | messenger |
 | `MIN_INSTANCES` | Минимальное количество VM | Для отказоустойчивости | 2 |
 | `MAX_INSTANCES` | Максимальное количество VM | Для масштабирования | 4 |
+
+#### Безопасность
+
+- **Все пароли и ключи** хранятся в GitHub Secrets
+- **ENCRYPTION_KEY** должен быть одинаковым на всех инстансах
+- **Сохрани ENCRYPTION_KEY** в надёжном месте (парольный менеджер)
+- Потеря `ENCRYPTION_KEY` = потеря всех сообщений навсегда
 
 ### 2. Получение YC_TOKEN
 
@@ -233,18 +249,49 @@ _acme-challenge.messenger.example.com.    CNAME    abc123.challenges.cm.yandexcl
 
 **Примечание:** Let's Encrypt сертификат автоматически обновляется каждые 90 дней.
 
+## Database Migrations
+
+**Важно**: Миграции базы данных запускаются **автоматически** при старте приложения.
+
+- **Локация**: `internal/storage/postgres/migration.go`
+- **Когда запускаются**: При каждом подключении к БД
+- **Что создаёт**:
+  - Таблица `users` с индексами
+  - Таблица `messages` с индексами
+  - Расширение `pgcrypto` для UUID
+- **Ручной запуск не требуется** - просто деплой приложения
+
+## Message Encryption
+
+Все сообщения шифруются перед сохранением в базу данных:
+
+- **Алгоритм**: AES-256-GCM
+- **Ключ**: `ENCRYPTION_KEY` из GitHub Secrets
+- **Хранение**: Шифрованные данные в колонке `messages.payload`
+- **Требования**:
+  - Ключ должен быть одинаковым на всех VM
+  - Минимум 32 символа
+  - **Никогда не терять ключ** - сообщения станут недоступны
+
 ## Локальная разработка
 
 ```bash
-cd terraform/envs/dev
-cp terraform.tfvars.example terraform.tfvars
+# Клонирование
+git clone <repo-url>
+cd messenger
 
-# Заполни terraform.tfvars:
-# - yc_cloud_id, yc_folder_id
-# - yc_token
-# - domain
-# - docker_image
-# - jwt_secret, db_password
+# Настройка переменных окружения
+cp .env.example .env
+# Отредактируй .env:
+# - DB_HOST=localhost
+# - ENCRYPTION_KEY=your-key-min-32-chars
+# - JWT_SECRET=your-secret
+
+# Запуск локальной БД
+docker-compose up -d postgres
+
+# Запуск приложения
+go run cmd/server/main.go
 ```
 
 **CI/CD не использует terraform.tfvars** — все значения берутся из GitHub Secrets/Variables.
@@ -273,50 +320,49 @@ terraform plan
 terraform apply
 ```
 
-## CI/CD Pipeline (Two-Stage)
+## CI/CD Pipeline
 
-Используется двухэтапный подход для разделения инфраструктуры и приложения:
+Используется единый workflow для сборки и деплоя:
 
-### Этап 1: Infrastructure Deploy (`.github/workflows/infrastructure.yml`)
+### Workflow: Build and Deploy (`.github/workflows/deploy.yml`)
 
-**Запускается при изменении:**
-- `terraform/**`
-- `.github/workflows/infrastructure.yml`
+**Запускается при:**
+- Push в `main` ветку
 - Вручную (`workflow_dispatch`)
 
 **Что делает:**
-1. Создаёт/обновляет инфраструктуру через Terraform
-2. Получает outputs (DB_HOST, ALB_IP, etc.)
-3. **Обновляет GitHub Variables** (DB_HOST и другие)
-4. Выводит DNS-записи для Let's Encrypt
 
-**Важно:** Запустить сначала! Без этого приложение не получит DB_HOST.
+#### Job 1: Build
+1. Checkout кода
+2. Setup Docker Buildx
+3. Логин в Docker Hub
+4. Генерация SHA тега (формат: `sha-xxxxxxx`)
+5. Сборка и пуш Docker образа
 
-### Этап 2: Application Deploy (`.github/workflows/application.yml`)
+#### Job 2: Deploy (зависит от Build)
+1. Checkout кода
+2. Setup Terraform
+3. Terraform Init с S3 backend
+4. Terraform Apply:
+   - Создаёт/обновляет всю инфраструктуру
+   - Managed PostgreSQL (если не создан)
+   - Instance Group с новым Docker образом
+   - Application Load Balancer
+   - Security Groups и Network
+   - **Rolling update** происходит автоматически
+5. Вывод summary с URL и статусом
 
-**Запускается при изменении:**
-- Кода приложения (не terraform!)
-- После успешного Infrastructure Deploy
-- Вручную (`workflow_dispatch`)
+**Передаваемые переменные в Terraform:**
+- Все Secrets: `JWT_SECRET`, `DB_PASSWORD`, `ENCRYPTION_KEY`, etc.
+- Все Variables: `DOMAIN`, `DB_USER`, etc.
+- Docker образ: `TF_VAR_docker_image=<sha-tag>`
 
-**Что делает:**
-1. Проверяет что DB_HOST установлен
-2. Собирает Docker образ
-3. Триггерит rolling update Instance Group
-4. Использует DB_HOST из GitHub Variables
-
-### Порядок первого деплоя
-
-```bash
-# 1. Сначала инфраструктура (создаёт PostgreSQL, ALB, получает DB_HOST)
-.github/workflows/infrastructure.yml
-
-# 2. Ждём создания DNS записи для Let's Encrypt
-#    (выводится в логах infrastructure pipeline)
-
-# 3. Затем приложение (использует DB_HOST из Variables)
-.github/workflows/application.yml
-```
+**Особенности:**
+- Единый workflow (не нужно запускать инфраструктуру отдельно)
+- Compute модуль ждёт создания Database (`depends_on`)
+- Docker образ использует SHA тег из Build stage
+- Rolling update происходит автоматически через Instance Group
+- Database migrations запускаются автоматически при старте приложения
 
 ### Как работает rolling update
 
@@ -349,26 +395,28 @@ State хранится в **Yandex Object Storage (S3)**:
 │   ├── alb/             # Application Load Balancer
 │   ├── compute/         # Instance Group
 │   ├── database/        # Managed PostgreSQL
-│   ├── network/         # VPC, subnets, security groups
+│   ├── network/         # VPC, subnets, security groups, NAT Gateway
 │   └── envs/dev/        # Dev окружение
 └── .github/workflows/    # CI/CD
-    ├── infrastructure.yml  # Stage 1: Infrastructure (Terraform)
-    └── application.yml     # Stage 2: Application (Build & Deploy)
+    └── deploy.yml        # Build & Deploy workflow
 ```
 
 ## Переменные окружения приложения
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `HTTP_ADDR` | Server bind address | `:8080` |
-| `JWT_SECRET` | JWT signing key | `<base64-string>` |
-| `JWT_DURATION` | Token lifetime | `24h` |
-| `DB_HOST` | Managed PostgreSQL host | `rc1a-...mdb.yandexcloud.net` |
-| `DB_PORT` | PostgreSQL port | `6432` |
-| `DB_USER` | Database user | `messenger` |
-| `DB_PASSWORD` | Database password | `<password>` |
-| `DB_NAME` | Database name | `messenger` |
-| `DB_SSLMODE` | SSL mode | `require` |
+| Variable | Description | Example | Required |
+|----------|-------------|---------|----------|
+| `JWT_SECRET` | JWT signing key | `<base64-string>` | Yes |
+| `JWT_DURATION` | Token lifetime | `24h` | No |
+| `ENCRYPTION_KEY` | Message encryption key (min 32 chars) | `<32+ chars>` | Yes |
+| `DB_HOST` | Managed PostgreSQL host | `rc1a-...mdb.yandexcloud.net` | Yes |
+| `DB_USER` | Database user | `messenger` | Yes |
+| `DB_PASSWORD` | Database password | `<password>` | Yes |
+| `DB_NAME` | Database name | `messenger` | Yes |
+| `DB_SSLMODE` | PostgreSQL SSL mode | `require` | No |
+| `DEFAULT_USER` | Default admin username | `admin` | No |
+| `DEFAULT_PASSWORD` | Default admin password | `admin123` | No |
+
+**Важно**: `ENCRYPTION_KEY` должен быть одинаковым на всех инстансах приложения!
 
 ## Доступ к приложению
 
@@ -440,6 +488,26 @@ psql "host=<db_host> port=6432 user=<user> dbname=<db> sslmode=require"
 3. Проверить Security Group (DB SG разрешает 6432 только из App subnet)
 4. Проверить, что Managed PostgreSQL создан и запущен
 
+### Ошибка шифрования сообщений
+
+1. Проверить, что `ENCRYPTION_KEY` установлен в GitHub Secrets
+2. Убедиться, что ключ минимум 32 символа
+3. Проверить, что ключ одинаковый на всех VM
+4. Проверить логи приложения: `docker logs messenger-app`
+
+### Сообщения не отображаются (после смены ключа)
+
+⚠️ **Если `ENCRYPTION_KEY` изменился или потерян**:
+- Старые сообщения нельзя расшифровать
+- Новые сообщения будут работать
+- **Восстановление невозможно** без старого ключа
+
+### Таблицы не создались автоматически
+
+1. Проверить подключение к БД в логах
+2. Убедиться, что приложение стартовало после подключения к БД
+3. Проверить логи миграций: `docker logs messenger-app | grep -i migration`
+
 ## Масштабирование
 
 ### Увеличить количество инстансов
@@ -471,8 +539,11 @@ scale_policy {
 - **Network Segmentation**: 3 подсети с разным уровнем доступа
 - **Least Privilege**: Security Groups разрешают только необходимые порты
 - **SSL/TLS**: HTTPS для клиентов, SSL для PostgreSQL
+- **Message Encryption**: AES-256-GCM для всех сообщений в БД
+- **Password Hashing**: bcrypt для паролей пользователей
 - **No Public Access**: VM и PostgreSQL недоступны из интернета напрямую
 - **Secrets**: Все credentials в GitHub Secrets
+- **Key Management**: ENCRYPTION_KEY единый для всех инстансов
 
 ## Стоимость (примерная)
 

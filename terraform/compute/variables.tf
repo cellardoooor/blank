@@ -42,6 +42,7 @@ variable "security_group_ids" {
 variable "docker_image" {
   description = "Docker image URL"
   type        = string
+  default     = "cellardooor/blank:latest"
 }
 
 variable "container_name" {
@@ -117,6 +118,13 @@ variable "default_user" {
 
 variable "default_password" {
   description = "Default password for messenger login"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "encryption_key" {
+  description = "Encryption key for message encryption (32+ characters)"
   type        = string
   sensitive   = true
   default     = ""

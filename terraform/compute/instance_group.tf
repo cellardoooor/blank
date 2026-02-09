@@ -1,5 +1,5 @@
-data "yandex_compute_image" "container_optimized" {
-  family = "container-optimized-image"
+data "yandex_compute_image" "ubuntu" {
+  family = "ubuntu-2204-lts"
 }
 
 locals {
@@ -18,7 +18,13 @@ locals {
     db_sslmode           = var.db_sslmode
     default_user_b64     = base64encode(var.default_user)
     default_password_b64 = base64encode(var.default_password)
+    encryption_key_b64   = base64encode(var.encryption_key)
   })
+}
+
+# Force replacement trigger - creates new VM on every docker_image change
+resource "terraform_data" "replacement" {
+  input = var.docker_image
 }
 
 # Instance Group for high availability and auto-scaling
@@ -37,7 +43,7 @@ resource "yandex_compute_instance_group" "main" {
 
     boot_disk {
       initialize_params {
-        image_id = data.yandex_compute_image.container_optimized.id
+        image_id = data.yandex_compute_image.ubuntu.id
         type     = "network-ssd"
         size     = var.disk_size
       }
@@ -52,8 +58,8 @@ resource "yandex_compute_instance_group" "main" {
 
     metadata = {
       user-data = local.cloud_init
-      # Version triggers rolling update when docker_image changes
-      version = md5("${var.docker_image}-${timestamp()}")
+      # Version triggers rolling update when docker_image or cloud-init changes
+      version = md5("${var.docker_image}${local.cloud_init}")
     }
   }
 
@@ -75,29 +81,20 @@ resource "yandex_compute_instance_group" "main" {
   deploy_policy {
     max_unavailable  = 0
     max_expansion    = 1
-    max_creating     = 2
+    max_creating     = 1
     startup_duration = 180
   }
 
-  health_check {
-    interval            = 15
-    timeout             = 10
-    unhealthy_threshold = 2
-    healthy_threshold   = 2
+  # Note: Health check is managed by ALB backend group only
+  # Do not add health_check block here - it conflicts with ALB health checks
 
-    http_options {
-      port = 8080
-      path = "/api/health"
-    }
-  }
-
-  # Create ALB target group automatically
+  # Create ALB target group automatically (Yandex Cloud doesn't allow external target_group_id)
   application_load_balancer {
-    # Target group will be created automatically
-    # Yandex Cloud doesn't allow specifying existing target_group_id
+    # Target group will be created automatically by Instance Group
   }
 
   lifecycle {
-    create_before_destroy = true
+    create_before_destroy = false
   }
 }
+

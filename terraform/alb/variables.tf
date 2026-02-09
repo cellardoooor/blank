@@ -20,7 +20,7 @@ variable "security_group_id" {
 }
 
 variable "target_group_id" {
-  description = "ALB target group ID created by instance group (required)"
+  description = "ALB target group ID from Instance Group"
   type        = string
 }
 
@@ -45,4 +45,10 @@ variable "zone" {
   description = "Availability zone"
   type        = string
   default     = "ru-central1-a"
+}
+
+variable "environment" {
+  description = "Environment name"
+  type        = string
+  default     = "dev"
 }

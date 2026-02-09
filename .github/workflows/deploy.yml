@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image_sha_full: ${{ steps.sha.outputs.sha_tag_full }}
+      image_tag: ${{ steps.sha.outputs.sha_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,7 +26,7 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract metadata
@@ -39,9 +40,12 @@ jobs:
       - name: Get SHA tag
         id: sha
         run: |
-          SHA_TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep -o 'sha-[a-f0-9]\+' | head -1)
-          echo "sha_tag=$SHA_TAG" >> $GITHUB_OUTPUT
-          echo "sha_tag_full=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$SHA_TAG" >> $GITHUB_OUTPUT
+          SHORT_SHA=${GITHUB_SHA::7}
+          SHA_TAG="sha-${SHORT_SHA}"
+          FULL_IMAGE="${REGISTRY}/${IMAGE_NAME}:${SHA_TAG}"
+
+          echo "sha_tag=${SHA_TAG}" >> "$GITHUB_OUTPUT"
+          echo "sha_tag_full=${FULL_IMAGE}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -56,6 +60,11 @@ jobs:
     environment: production
     
     steps:
+      - name: Debug build output
+        run: |
+          echo "Received image_sha_full: '${{ needs.build.outputs.image_sha_full }}'"
+          echo "Received image_tag: '${{ needs.build.outputs.image_tag }}'"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -88,11 +97,10 @@ jobs:
           TF_VAR_docker_image: ${{ needs.build.outputs.image_sha_full }}
           TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
-          TF_VAR_http_addr: ${{ vars.HTTP_ADDR }}
+          TF_VAR_encryption_key: ${{ secrets.ENCRYPTION_KEY }}
           TF_VAR_jwt_duration: ${{ vars.JWT_DURATION }}
           TF_VAR_db_user: ${{ vars.DB_USER }}
           TF_VAR_db_name: ${{ vars.DB_NAME }}
-          TF_VAR_db_sslmode: ${{ vars.DB_SSLMODE }}
           TF_VAR_domain: ${{ vars.DOMAIN }}
           TF_VAR_default_user: ${{ secrets.DEFAULT_USER }}
           TF_VAR_default_password: ${{ secrets.DEFAULT_PASSWORD }}

@@ -37,7 +37,11 @@ module "database" {
   zone              = var.zone
 }
 
-# Compute module - creates Instance Group (ALB target group created automatically)
+resource "yandex_alb_target_group" "backend" {
+  name = "${var.environment}-backend-tg"
+}
+
+# Compute module - creates Instance Group (creates its own target group)
 module "compute" {
   source = "../../compute"
 
@@ -55,6 +59,7 @@ module "compute" {
   docker_image   = var.docker_image
   container_name = var.container_name
   app_port       = var.app_port
+  http_addr      = ":8080"
 
   jwt_secret   = var.jwt_secret
   jwt_duration = var.jwt_duration
@@ -69,12 +74,16 @@ module "compute" {
 
   default_user     = var.default_user
   default_password = var.default_password
+  encryption_key   = var.encryption_key
 
   min_instances = var.min_instances
   max_instances = var.max_instances
+
+  # Wait for database to be fully created before starting compute instances
+  depends_on = [module.database]
 }
 
-# ALB module - creates Application Load Balancer
+# ALB module - creates Application Load Balancer (uses compute's target group)
 module "alb" {
   source = "../../alb"
 
@@ -84,6 +93,7 @@ module "alb" {
   public_subnet_id  = module.network.public_subnet_id
   security_group_id = module.network.alb_security_group_id
   zone              = var.zone
+
   target_group_id   = module.compute.target_group_id
-  # certificate_id = var.certificate_id
+  depends_on = [module.compute]
 }

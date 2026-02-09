@@ -7,7 +7,9 @@ Production-ready messenger backend on Go with PostgreSQL and WebSocket support.
 - REST API + WebSocket (real-time messaging)
 - JWT authentication
 - 1-to-1 messaging (no group chats)
-- Opaque message payloads (server doesn't interpret content)
+- **Message Encryption**: AES-256-GCM encryption for all messages in database
+- **Password Security**: bcrypt hashing for passwords
+- **Auto-migrations**: Database schema created automatically on startup
 - Stateless backend (ready for horizontal scaling)
 - Docker support
 - Terraform infrastructure for Yandex Cloud
@@ -77,6 +79,7 @@ Internet
 │  • Min: 2 VMs                       │
 │  • Auto-healing                     │
 │  • Rolling updates                  │
+│  • NAT Gateway (Internet access)    │
 └──────────────┬──────────────────────┘
                | PostgreSQL (6432) + SSL
                v
@@ -142,17 +145,14 @@ terraform output certificate_status
 
 ### CI/CD
 
-Two-stage deployment pipeline:
+Single workflow deployment (`.github/workflows/deploy.yml`):
 
-**Stage 1: Infrastructure** (`.github/workflows/infrastructure.yml`)
-- Deploys Terraform infrastructure (ALB, PostgreSQL, Instance Group)
-- Outputs DB_HOST and saves it to GitHub Variables
-- Run this first!
-
-**Stage 2: Application** (`.github/workflows/application.yml`)
-- Builds and pushes Docker image
+**Build & Deploy:**
+- Builds Docker image with SHA tag
+- Pushes to Docker Hub
+- Deploys Terraform infrastructure
 - Triggers rolling update on Instance Group
-- Uses DB_HOST from GitHub Variables
+- Uses DB_HOST from database module output
 
 **Required Secrets:**
 - `DOCKERHUB_USERNAME` - your Docker Hub username
@@ -162,19 +162,19 @@ Two-stage deployment pipeline:
 - `TF_STATE_BUCKET` - S3 bucket name for Terraform state
 - `JWT_SECRET` - JWT signing secret (generate with `openssl rand -base64 32`)
 - `DB_PASSWORD` - Managed PostgreSQL password
+- `ENCRYPTION_KEY` - Message encryption key (minimum 32 characters, generate with `openssl rand -base64 32`)
 - `YC_SERVICE_ACCOUNT_ID` - Service account for Instance Group (optional)
+- `DEFAULT_USER` / `DEFAULT_PASSWORD` - Default admin user credentials (optional)
 
 **Required Variables:**
 - `YC_CLOUD_ID` - Yandex Cloud ID
 - `YC_FOLDER_ID` - Yandex Folder ID
 - `DOMAIN` - Domain name (e.g., messenger.example.com)
-- `DB_USER` - Database user
-- `DB_NAME` - Database name
+- `JWT_DURATION` - Token lifetime (default: 24h)
+- `DB_USER` - Database user (default: messenger)
+- `DB_NAME` - Database name (default: messenger)
 - `MIN_INSTANCES` - Minimum VM count (default: 2)
 - `MAX_INSTANCES` - Maximum VM count (default: 4)
-
-**Auto-generated Variables:**
-- `DB_HOST` - Managed PostgreSQL host (set by Infrastructure pipeline)
 
 ## Environment Variables
 
@@ -182,15 +182,14 @@ Two-stage deployment pipeline:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `HTTP_ADDR` | Server bind address | `:8080` |
 | `JWT_SECRET` | JWT signing secret | required |
 | `JWT_DURATION` | Token lifetime | `24h` |
+| `ENCRYPTION_KEY` | Message encryption key (min 32 chars) | required |
 | `DB_HOST` | Managed PostgreSQL host | required |
-| `DB_PORT` | PostgreSQL port | `6432` |
 | `DB_USER` | Database user | required |
 | `DB_PASSWORD` | Database password | required |
 | `DB_NAME` | Database name | required |
-| `DB_SSLMODE` | SSL mode | `require` |
+| `DB_SSLMODE` | PostgreSQL SSL mode | `require` |
 
 ### Local Development Only
 
@@ -198,7 +197,6 @@ Two-stage deployment pipeline:
 # For local development with docker-compose:
 DB_HOST=localhost
 DB_PORT=5432
-DB_SSLMODE=disable
 ```
 
 ## Getting YC_TOKEN
@@ -218,9 +216,10 @@ yc iam create-token
 - **Stateless**: JWT tokens only, no sessions
 - **Highly Available**: Min 2 VMs with auto-healing
 - **Scalable**: Instance Group with auto-scaling support
-- **Secure**: HTTPS with Let's Encrypt, SSL for database, restrictive security groups
+- **Secure**: HTTPS with Let's Encrypt, SSL for database, message encryption (AES-256-GCM), bcrypt passwords
 - **Zero-downtime**: Rolling updates via Instance Group
 - **Auto SSL**: Let's Encrypt certificates with automatic renewal (90 days)
+- **Auto-migrations**: Database tables created automatically on startup
 - **Frontend**: Custom Chicago font applied to all UI elements
 
 ## License

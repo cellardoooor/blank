@@ -6,19 +6,22 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"messenger/internal/crypto"
 	"messenger/internal/model"
 	"messenger/internal/storage"
 )
 
 type MessageService struct {
-	repo     storage.MessageRepository
-	userRepo storage.UserRepository
+	repo      storage.MessageRepository
+	userRepo  storage.UserRepository
+	encryptor *crypto.Encryptor
 }
 
-func NewMessageService(repo storage.MessageRepository, userRepo storage.UserRepository) *MessageService {
+func NewMessageService(repo storage.MessageRepository, userRepo storage.UserRepository, encryptor *crypto.Encryptor) *MessageService {
 	return &MessageService{
-		repo:     repo,
-		userRepo: userRepo,
+		repo:      repo,
+		userRepo:  userRepo,
+		encryptor: encryptor,
 	}
 }
 
@@ -35,11 +38,17 @@ func (s *MessageService) Send(ctx context.Context, senderID, receiverID uuid.UUI
 		return nil, fmt.Errorf("receiver not found")
 	}
 
+	// Encrypt payload before saving
+	encryptedPayload, err := s.encryptor.Encrypt(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt message: %w", err)
+	}
+
 	msg := &model.Message{
 		ID:         uuid.New(),
 		SenderID:   senderID,
 		ReceiverID: receiverID,
-		Payload:    payload,
+		Payload:    []byte(encryptedPayload),
 		CreatedAt:  time.Now(),
 	}
 
@@ -47,6 +56,8 @@ func (s *MessageService) Send(ctx context.Context, senderID, receiverID uuid.UUI
 		return nil, err
 	}
 
+	// Return decrypted payload for the response
+	msg.Payload = payload
 	return msg, nil
 }
 
@@ -61,7 +72,23 @@ func (s *MessageService) GetHistory(ctx context.Context, user1, user2 uuid.UUID,
 	if offset < 0 {
 		offset = 0
 	}
-	return s.repo.GetByUserPair(ctx, user1, user2, limit, offset)
+
+	messages, err := s.repo.GetByUserPair(ctx, user1, user2, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decrypt messages
+	for i := range messages {
+		decrypted, err := s.encryptor.Decrypt(string(messages[i].Payload))
+		if err != nil {
+			// If decryption fails, keep the original (for backward compatibility)
+			continue
+		}
+		messages[i].Payload = decrypted
+	}
+
+	return messages, nil
 }
 
 func (s *MessageService) GetConversationPartners(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
@@ -98,10 +125,16 @@ func (s *MessageService) GetChatList(ctx context.Context, userID uuid.UUID) ([]C
 			continue
 		}
 
-		// Decode payload to string
+		// Decrypt and decode payload to string
 		lastMsgText := ""
 		if chat.LastMessage != nil {
-			lastMsgText = string(chat.LastMessage.Payload)
+			decrypted, err := s.encryptor.Decrypt(string(chat.LastMessage.Payload))
+			if err == nil {
+				lastMsgText = string(decrypted)
+			} else {
+				// Fallback for backward compatibility
+				lastMsgText = string(chat.LastMessage.Payload)
+			}
 		}
 
 		result = append(result, ChatWithUser{
