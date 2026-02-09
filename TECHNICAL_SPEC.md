@@ -82,9 +82,10 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 │   ├── app.js                 # JavaScript application (dynamic contacts, user filtering, optimistic messages)
 │   ├── style.css              # Styles (white bg, black text, Chicago font)
 │   └── fonts/                 # Chicago Regular font files
-├── migrations/
-│   ├── 001_init.sql           # Database schema
-│   └── 002_username_case_insensitive.sql  # Case-insensitive username index
+│   ├── migrations/              # Database migrations (embedded in binary)
+│   │   ├── 001_init.sql           # Database schema
+│   │   └── 002_username_case_insensitive.sql  # Case-insensitive username index
+│   │   └── embed.go               # embed.FS for embedding migrations
 ├── terraform/                  # Infrastructure (ALB, Instance Group, Managed PostgreSQL)
 │   ├── network/               # VPC with 3 subnets (public, app, db)
 │   ├── alb/                   # Application Load Balancer with HTTPS
@@ -407,12 +408,13 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 
 ### 7.1 Application Initialization (internal/app/app.go)
 1. Connect to **Yandex Managed PostgreSQL** (SSL required)
-2. Initialize repositories
-3. Create services (auth, user, message)
-4. Setup WebSocket hub
-5. Build HTTP router with middleware
-6. Add health check endpoint (for ALB)
-7. **Seed default user** if DEFAULT_USER/DEFAULT_PASSWORD configured
+2. **Run database migrations** (auto-applied from embedded files)
+3. Initialize repositories
+4. Create services (auth, user, message)
+5. Setup WebSocket hub
+6. Build HTTP router with middleware
+7. Add health check endpoint (for ALB)
+8. **Seed default user** if DEFAULT_USER/DEFAULT_PASSWORD configured
 
 **Note**: Application now requires Managed PostgreSQL to start (no graceful degradation).
 
@@ -622,7 +624,6 @@ services:
       POSTGRES_DB: messenger
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
     ports:
       - "5432:5432"
     healthcheck:
@@ -1151,8 +1152,8 @@ When modifying this project, maintain:
 5. Add tests
 
 ### 19.2 Changing Database Schema
-1. Create new migration file in `migrations/`
-2. Update `init.sql` for fresh deployments
+1. Create new migration file in `internal/migrations/`
+2. Migrations are auto-applied on startup (embedded in binary)
 3. Test migration on staging
 4. Ensure backward compatibility (or coordinate frontend)
 5. Update model structs
@@ -1180,11 +1181,22 @@ When modifying this project, maintain:
 
 ---
 
-**Version**: 2.0
-**Last Updated**: 2026-02-05
+**Version**: 2.2
+**Last Updated**: 2026-02-09
 **Maintainer**: AI Assistant
 
 ## Changelog
+
+### Version 2.2 (2026-02-09) - Embedded Database Migrations
+- **Automatic Migrations**: Database migrations now run automatically on application startup
+  - **Embedded Files**: Migrations embedded in binary via `//go:embed` directive
+  - **Schema Tracking**: `schema_migrations` table tracks applied migrations
+  - **Idempotent**: Safe to run multiple times, skips already-applied migrations
+- **Project Structure**: Migrations moved from `/migrations/` to `/internal/migrations/`
+- **Docker Compose**: Removed volume mount for migrations (no longer needed)
+- **New Files**:
+  - `internal/migrations/embed.go` - embed.FS declaration
+  - `internal/storage/postgres/migrations.go` - migration runner logic
 
 ### Version 2.1 (2026-02-05) - Automatic SSL Certificates
 - **Let's Encrypt Integration**: Automatic SSL certificate provisioning

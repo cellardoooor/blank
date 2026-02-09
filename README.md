@@ -53,7 +53,7 @@ docker push cellardooor/blank:latest
 │   └── ws/              # WebSocket handlers
 ├── web/                 # Frontend static files (Chicago font)
 ├── terraform/           # Infrastructure as Code (ALB, Instance Group, Managed PostgreSQL)
-└── migrations/          # Database migrations
+└── internal/migrations/ # Database migrations (embedded in binary)
 ```
 
 ## Architecture

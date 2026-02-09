@@ -58,22 +58,22 @@ resource "yandex_compute_instance_group" "main" {
   }
 
   scale_policy {
-  auto_scale {
-    initial_size           = 2
-    measurement_duration   = 60
-    cpu_utilization_target = 75
-    warmup_duration        = 120
-    min_zone_size          = var.min_instances
-    max_size               = var.max_instances
+    auto_scale {
+      initial_size           = var.min_instances
+      measurement_duration   = 60
+      cpu_utilization_target = 75
+      warmup_duration        = 120
+      min_zone_size          = var.min_instances
+      max_size               = var.max_instances
+    }
   }
-}
 
   allocation_policy {
     zones = [var.zone]
   }
 
   deploy_policy {
-    max_unavailable  = 1
+    max_unavailable  = 0
     max_expansion    = 1
     max_creating     = 2
     startup_duration = 180

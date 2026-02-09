@@ -11,13 +11,14 @@ import (
 
 	"messenger/internal/app"
 	"messenger/internal/config"
+	"messenger/internal/migrations"
 )
 
 func main() {
 	cfg := config.Load()
 
 	application := app.New(cfg)
-	if err := application.Init(context.Background()); err != nil {
+	if err := application.Init(context.Background(), migrations.FS); err != nil {
 		log.Fatalf("failed to initialize app: %v", err)
 	}
 

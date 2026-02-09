@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"io/fs"
 	"log"
 	"net/http"
 
@@ -27,8 +28,7 @@ func New(cfg *config.Config) *App {
 	}
 }
 
-func (a *App) Init(ctx context.Context) error {
-	// Try to connect to database, but don't fail if unavailable
+func (a *App) Init(ctx context.Context, migrationsFS fs.FS) error {
 	pgStorage, err := postgres.New(a.config.DB.DSN())
 	if err != nil {
 		log.Printf("warning: database connection failed: %v", err)
@@ -40,6 +40,12 @@ func (a *App) Init(ctx context.Context) error {
 	} else {
 		a.storage = pgStorage
 		log.Println("database connected")
+
+		if err := a.storage.RunMigrations(ctx, migrationsFS); err != nil {
+			log.Printf("warning: migrations failed: %v", err)
+		} else {
+			log.Println("migrations applied successfully")
+		}
 	}
 
 	// Initialize services with storage (may be nil)
