@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -78,6 +79,12 @@ func (s *Service) Register(ctx context.Context, username, password string) (*mod
 	// Validate username length: 5-16 characters
 	if len(username) < 5 || len(username) > 16 {
 		return nil, fmt.Errorf("username must be between 5 and 16 characters")
+	}
+
+	// Validate username format: latin letters and digits only
+	usernameRegex := regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+	if !usernameRegex.MatchString(username) {
+		return nil, fmt.Errorf("username must contain only latin letters and digits")
 	}
 
 	// Validate password length: minimum 5 characters

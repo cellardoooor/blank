@@ -111,7 +111,7 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 ```go
 type User struct {
     ID           uuid.UUID `json:"id"`
-    Username     string    `json:"username"`         // 5-16 characters
+    Username     string    `json:"username"`         // 5-16 characters, latin letters and digits only
     PasswordHash string    `json:"-"`                // Never exposed in JSON
     CreatedAt    time.Time `json:"created_at"`
 }
@@ -163,7 +163,7 @@ CREATE INDEX idx_messages_created ON messages(created_at DESC);
 All protected endpoints require header: `Authorization: Bearer <token>`
 
 ### 5.2 Validation Rules
-- **Username**: 5-16 characters
+- **Username**: 5-16 characters, latin letters and digits only (a-z, A-Z, 0-9)
 - **Password**: Minimum 5 characters
 
 ### 5.3 Endpoints
@@ -190,6 +190,10 @@ Register new user with validation.
 // Response 400
 {
   "error": "username must be between 5 and 16 characters"
+}
+// or
+{
+  "error": "username must contain only latin letters and digits"
 }
 // or
 {
@@ -464,13 +468,13 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 
 ### 7.2 Authentication Service (internal/auth/service.go)
 - **Methods**:
-  - `Register(username, password) (*User, error)` - with validation (username 5-16 chars, password min 5)
+  - `Register(username, password) (*User, error)` - with validation (username 5-16 chars, latin letters/digits only, password min 5)
   - `Login(username, password) (token string, err error)`
   - `ValidateToken(token string) (userID uuid.UUID, err error)`
   - `HashPassword(password string) (string, error)`
   - `CheckPassword(password, hash string) bool`
 - **Validation Rules**:
-  - Username: 5-16 characters
+  - Username: 5-16 characters, latin letters and digits only
   - Password: Minimum 5 characters
 - **Password Hashing**: bcrypt with default cost
 - **JWT Claims**: `sub` (user ID), `exp` (expiration)
@@ -552,7 +556,7 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 ### 8.2 Layout Structure
 ```
 +-----------------------------------------------+
-|  Chats    +   |  [Avatar] Username           |
+|  Chats    +   |  Username                     |
 |  Sidebar      |                               |
 |               |  [Message bubbles]            |
 |  • User1     |                               |
@@ -579,7 +583,6 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 ### 8.5 Chat List (Left Sidebar)
 - **Header**: "Chats" title + "New Chat" button (white background, black text, black border)
 - **Chat Items** (sorted by last message time, newest first):
-  - Avatar circle with first letter of username
   - Username (bold)
   - Last message preview (truncated)
   - Timestamp with smart formatting:
@@ -590,7 +593,7 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 - **Footer**: Current user name + "Change Password" button + "Logout" button
 
 ### 8.6 Chat Window (Right Panel)
-- **Header**: Avatar + Username + Status
+- **Header**: Username + Status
 - **Messages Area**: Scrollable container with bubbles
   - **Incoming (other)**: Left-aligned, white background (#fff), black text, rounded corners
   - **Outgoing (me)**: Right-aligned, white background (#fff), black text, rounded corners
@@ -665,7 +668,6 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 - **Buttons**:
   - Primary: Black bg, white text
   - Secondary: White bg, black border, black text
-- **Avatars**: Black circle (#000) with white initial letter
 - **Scrollbars**: Thin gray (#cccccc) with rounded corners
 
 ## 9. Docker Configuration
@@ -1018,6 +1020,7 @@ golang.org/x/crypto v0.18.0
 - `Username required`
 - `User not found`
 - `username must be between 5 and 16 characters`
+- `username must contain only latin letters and digits`
 - `password must be at least 5 characters`
 - `username already taken`
 - `receiver not found`
@@ -1043,7 +1046,7 @@ golang.org/x/crypto v0.18.0
 - 24h default expiration (configurable)
 - bcrypt password hashing (adaptive cost)
 - No sensitive data in JWT payload
-- **Validation**: Username 5-16 chars, password min 5 chars
+- **Validation**: Username 5-16 chars, latin letters/digits only, password min 5 chars
 
 ### 14.2 Message Encryption
 - **Algorithm**: AES-256-GCM
@@ -1229,7 +1232,7 @@ When modifying this project, maintain:
 4. **Immutable infrastructure**: Recreate, don't mutate
 5. **12-factor app**: Config via env vars
 6. **API compatibility**: Version endpoints if breaking changes
-7. **Validation**: Username 5-16 chars, password min 5 chars
+7. **Validation**: Username 5-16 chars, latin letters/digits only, password min 5 chars
 
 ### 19.1 Adding New Endpoints
 1. Add handler to `internal/http/handler.go`
@@ -1268,11 +1271,21 @@ When modifying this project, maintain:
 
 ---
 
-**Version**: 2.3
+**Version**: 2.4
 **Last Updated**: 2026-02-09
 **Maintainer**: AI Assistant
 
 ## Changelog
+
+### Version 2.4 (2026-02-09) - Username Validation & Avatar Removal
+- **Username Validation**: Usernames must contain only latin letters and digits (a-z, A-Z, 0-9)
+  - **Backend**: Added regex validation in `internal/auth/service.go`
+  - **Frontend**: Added client-side validation in `web/app.js`
+  - **Error Message**: "username must contain only latin letters and digits"
+- **Avatar Removal**: Removed all avatar elements from the UI
+  - Chat list items no longer show avatar circles
+  - Chat header no longer shows avatar
+  - Updated TECHNICAL_SPEC.md to remove avatar references
 
 ### Version 2.3 (2026-02-09) - UI Improvements & Change Password
 - **Change Password Feature**: Users can now change their password

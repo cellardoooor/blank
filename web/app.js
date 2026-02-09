@@ -22,6 +22,11 @@ let messagesMap = new Map(); // userId -> messages array
 
 const API_URL = '/api';
 
+function isValidUsername(username) {
+    const usernameRegex = /^[a-zA-Z0-9]+$/;
+    return usernameRegex.test(username);
+}
+
 async function apiRequest(endpoint, options = {}) {
     try {
         const res = await fetch(`${API_URL}${endpoint}`, {
@@ -68,6 +73,11 @@ async function login() {
         return;
     }
 
+    if (!isValidUsername(username)) {
+        errorEl.textContent = 'Username must contain only latin letters and digits';
+        return;
+    }
+
     try {
         const res = await fetch(`${API_URL}/auth/login`, {
             method: 'POST',
@@ -98,6 +108,11 @@ async function register() {
 
     if (!username || !password) {
         errorEl.textContent = 'Please enter username and password';
+        return;
+    }
+
+    if (!isValidUsername(username)) {
+        errorEl.textContent = 'Username must contain only latin letters and digits';
         return;
     }
 
@@ -341,12 +356,10 @@ function renderChatList() {
         div.className = 'chat-item' + (currentChat === chat.userId ? ' active' : '');
         div.onclick = () => selectChat(chat.userId);
         
-        const initial = chat.username.charAt(0).toUpperCase();
         const timeStr = formatChatListTime(chat.lastMessageTime);
         const preview = chat.lastMessage ? truncateText(chat.lastMessage, 30) : 'No messages yet';
         
         div.innerHTML = `
-            <div class="chat-avatar">${initial}</div>
             <div class="chat-content">
                 <div class="chat-header-row">
                     <div class="chat-username">${escapeHtml(chat.username)}</div>
@@ -373,7 +386,6 @@ function selectChat(chatUserId) {
     // Update chat header
     document.getElementById('chat-username').textContent = chat.username;
     document.getElementById('chat-status').textContent = '';
-    document.getElementById('chat-avatar').textContent = chat.username.charAt(0).toUpperCase();
     
     // Update sidebar selection
     renderChatList();

@@ -221,26 +221,6 @@ body {
     color: #ffffff;
 }
 
-.chat-avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: #000000;
-    color: #ffffff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    font-weight: 500;
-    margin-right: 12px;
-    flex-shrink: 0;
-}
-
-.chat-item.active .chat-avatar {
-    background: #ffffff;
-    color: #000000;
-}
-
 .chat-content {
     flex: 1;
     min-width: 0;
@@ -348,20 +328,6 @@ body {
     padding: 12px 20px;
     border-bottom: 1px solid #e0e0e0;
     background: #ffffff;
-}
-
-#chat-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: #000000;
-    color: #ffffff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    font-weight: 500;
-    margin-right: 12px;
 }
 
 #chat-info {
