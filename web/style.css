@@ -306,6 +306,8 @@ body {
     display: flex;
     flex-direction: column;
     background: #ffffff;
+    min-height: 0; /* Fix for flex overflow */
+    overflow: hidden; /* Fix for flex overflow */
 }
 
 /* Empty State */
@@ -320,6 +322,8 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-height: 0; /* Fix for flex overflow */
+    overflow: hidden; /* Fix for flex overflow */
 }
 
 #chat-header {
@@ -328,6 +332,7 @@ body {
     padding: 12px 20px;
     border-bottom: 1px solid #e0e0e0;
     background: #ffffff;
+    flex-shrink: 0; /* Prevent header from shrinking */
 }
 
 #chat-info {
@@ -350,6 +355,7 @@ body {
     overflow-y: auto;
     padding: 20px;
     background: #ffffff;
+    min-height: 0; /* Fix for flex overflow */
 }
 
 #messages {
@@ -415,6 +421,7 @@ body {
     border-top: 1px solid #e0e0e0;
     background: #ffffff;
     gap: 12px;
+    flex-shrink: 0; /* Prevent input area from shrinking */
 }
 
 #message-input {
