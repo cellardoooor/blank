@@ -20,6 +20,21 @@ resource "yandex_alb_virtual_host" "main" {
   authority      = [var.domain, "www.${var.domain}"]
 
   route {
+    name = "ws-route"
+    http_route {
+      http_match {
+        path {
+          prefix = "/ws"
+        }
+      }
+      http_route_action {
+        backend_group_id = yandex_alb_backend_group.main.id
+        timeout          = "86400s"
+      }
+    }
+  }
+
+  route {
     name = "api-route"
     http_route {
       http_match {
@@ -44,7 +59,6 @@ resource "yandex_alb_backend_group" "main" {
     weight           = 100
     port             = 8080
     target_group_ids = [var.target_group_id]
-    enable_websocket = true
     healthcheck {
       timeout             = "10s"
       interval            = "5s"
