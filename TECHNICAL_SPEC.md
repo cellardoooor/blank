@@ -552,6 +552,8 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 - Auto-resizing message input
 - "New Chat" button with search and filtering modal
 - User filtering (exclude self and existing conversations)
+- **Message Input Limit**: 65,536 characters maximum (HTML maxlength attribute)
+- **Browser Push Notifications**: Desktop notifications for incoming messages when window is not focused
 
 ### 8.2 Layout Structure
 ```

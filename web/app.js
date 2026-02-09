@@ -187,6 +187,9 @@ async function initApp() {
         // Setup message input auto-resize
         setupInputResize();
         
+        // Request notification permission
+        requestNotificationPermission();
+        
     } catch (e) {
         console.error('Failed to initialize app:', e);
         showAuth();
@@ -234,6 +237,15 @@ function handleIncomingMessage(msg) {
     // Update chat list
     updateChatFromMessage(partnerId, msg);
     
+    
+    // Show push notification for incoming messages
+    if (msg.sender_id !== userId) {
+        const text = decodePayload(msg.payload);
+        const chat = chats.get(partnerId);
+        const senderName = chat ? chat.username : 'User';
+        showNotification(senderName, text, partnerId);
+    }
+
     // If this is the active chat, display it (or replace optimistic)
     if (currentChat === partnerId) {
         // Try to replace optimistic message first
@@ -462,6 +474,53 @@ function replaceOptimisticMessage(serverMsg) {
 function decodePayload(payload) {
     // Payload is now a string directly from server
     return String(payload);
+}
+
+// ==================== PUSH NOTIFICATIONS ====================
+
+function requestNotificationPermission() {
+    if (!('Notification' in window)) {
+        console.log('Browser does not support notifications');
+        return;
+    }
+    
+    if (Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+            console.log('Notification permission:', permission);
+        });
+    }
+}
+
+function showNotification(title, body, chatUserId) {
+    if (!('Notification' in window)) {
+        return;
+    }
+    
+    if (Notification.permission !== 'granted') {
+        return;
+    }
+    
+    // Don't show notification if the chat is currently active and window is focused
+    if (currentChat === chatUserId && document.hasFocus()) {
+        return;
+    }
+    
+    const notification = new Notification(title, {
+        body: body,
+        icon: '/favicon.ico',
+        tag: 'chat-' + chatUserId // Group notifications by chat
+    });
+    
+    notification.onclick = function() {
+        window.focus();
+        if (chats.has(chatUserId)) {
+            selectChat(chatUserId);
+        }
+        notification.close();
+    };
+    
+    // Auto-close after 5 seconds
+    setTimeout(() => notification.close(), 5000);
 }
 
 function sendMessage() {
