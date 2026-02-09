@@ -30,6 +30,7 @@ resource "yandex_alb_virtual_host" "main" {
       http_route_action {
         backend_group_id = yandex_alb_backend_group.main.id
         timeout          = "86400s"
+        upgrade_types    = ["websocket"]
       }
     }
   }
