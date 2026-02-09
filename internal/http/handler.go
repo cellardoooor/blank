@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -37,11 +38,11 @@ func (h *Handler) Router() *mux.Router {
 	r.HandleFunc("/api/health", h.healthCheck).Methods("GET", "OPTIONS")
 	r.HandleFunc("/api/auth/register", h.register).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/auth/login", h.login).Methods("POST", "OPTIONS")
+	r.HandleFunc("/api/auth/change-password", h.authMiddleware(h.changePassword)).Methods("POST", "OPTIONS")
 
 	api := r.PathPrefix("/api").Subrouter()
 	api.Use(auth.Middleware(h.authService))
 	api.HandleFunc("/me", h.getCurrentUser).Methods("GET")
-	api.HandleFunc("/auth/change-password", h.changePassword).Methods("POST", "OPTIONS")
 	api.HandleFunc("/users", h.listUsers).Methods("GET")
 	api.HandleFunc("/users/{id}", h.getUser).Methods("GET")
 	api.HandleFunc("/conversations", h.getConversations).Methods("GET")
@@ -65,6 +66,39 @@ func (h *Handler) corsMiddleware() mux.MiddlewareFunc {
 		MaxAge:           86400,
 	})
 	return c.Handler
+}
+
+func (h *Handler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Skip OPTIONS requests (CORS preflight)
+		if r.Method == "OPTIONS" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		token := extractToken(r)
+		if token == "" {
+			respondError(w, http.StatusUnauthorized, "authorization required")
+			return
+		}
+
+		userID, err := h.authService.ValidateToken(token)
+		if err != nil {
+			respondError(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), auth.ContextKey(), userID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	}
+}
+
+func extractToken(r *http.Request) string {
+	bearer := r.Header.Get("Authorization")
+	if len(bearer) > 7 && (bearer[:7] == "Bearer " || bearer[:7] == "bearer ") {
+		return bearer[7:]
+	}
+	return ""
 }
 
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {

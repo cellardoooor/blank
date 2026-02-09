@@ -11,6 +11,10 @@ import (
 
 type contextKey struct{}
 
+func ContextKey() contextKey {
+	return contextKey{}
+}
+
 func Middleware(authService *Service) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
