@@ -12,6 +12,7 @@ env:
 
 jobs:
   build:
+    if: contains(github.event.head_commit.message, '[dev]')
     runs-on: ubuntu-latest
     outputs:
       image_sha_full: ${{ steps.sha.outputs.sha_tag_full }}
