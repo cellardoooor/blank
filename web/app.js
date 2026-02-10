@@ -279,15 +279,14 @@ function handleIncomingMessage(msg) {
 }
 
 function handleReadStatus(msg) {
-    if (msg.reader_id && msg.partner_id === userId) {
+    if (msg.partner_id === userId) {
         markOutgoingAsRead(msg.reader_id);
     }
 }
 
-function markOutgoingAsRead(partnerId) {
-    const container = document.getElementById('messages');
-    const outgoingMessages = container.querySelectorAll('.message.outgoing');
-    outgoingMessages.forEach(msgDiv => {
+function markOutgoingAsRead(readerId) {
+    const selector = `.message.outgoing[data-receiver-id="${readerId}"]`;
+    document.querySelectorAll(selector).forEach(msgDiv => {
         msgDiv.classList.remove('sending', 'delivered');
         msgDiv.classList.add('read');
     });
@@ -526,6 +525,9 @@ function displayMessage(msg, status = '', forcedStatus = '') {
     const div = document.createElement('div');
     div.className = `message ${isOutgoing ? 'outgoing' : 'incoming'} ${actualStatus}`;
     div.dataset.messageId = msg.id;
+    if (isOutgoing) {
+        div.dataset.receiverId = msg.receiver_id;
+    }
     
     const text = decodePayload(msg.payload);
     const time = formatMessageTime(new Date(msg.created_at));
