@@ -18,6 +18,7 @@ type UserRepository interface {
 type MessageRepository interface {
 	Create(ctx context.Context, msg *model.Message) error
 	GetByUserPair(ctx context.Context, user1, user2 uuid.UUID, limit, offset int) ([]model.Message, error)
+	GetByUserPairWithReadStatus(ctx context.Context, currentUser, partnerID uuid.UUID, limit, offset int) ([]model.MessageWithRead, error)
 	GetConversationPartners(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 	GetChatList(ctx context.Context, userID uuid.UUID) ([]ChatInfo, error)
 	MarkAsRead(ctx context.Context, userID, partnerID uuid.UUID) error

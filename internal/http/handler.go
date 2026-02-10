@@ -329,7 +329,7 @@ func (h *Handler) getMessages(w http.ResponseWriter, r *http.Request) {
 	limit := 50
 	offset := 0
 
-	messages, err := h.messageService.GetHistory(r.Context(), userID, otherID, limit, offset)
+	messages, err := h.messageService.GetHistoryWithReadStatus(r.Context(), userID, otherID, limit, offset)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to get messages")
 		return
@@ -342,8 +342,9 @@ func (h *Handler) getMessages(w http.ResponseWriter, r *http.Request) {
 			"id":          msg.ID,
 			"sender_id":   msg.SenderID,
 			"receiver_id": msg.ReceiverID,
-			"payload":     string(msg.Payload), // Convert []byte to string
+			"payload":     string(msg.Payload),
 			"created_at":  msg.CreatedAt.Format(time.RFC3339),
+			"is_read":     msg.IsRead,
 		}
 	}
 

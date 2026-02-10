@@ -170,6 +170,36 @@ func (r *MessageRepo) GetByUserPair(ctx context.Context, user1, user2 uuid.UUID,
 	return messages, rows.Err()
 }
 
+func (r *MessageRepo) GetByUserPairWithReadStatus(ctx context.Context, currentUser, partnerID uuid.UUID, limit, offset int) ([]model.MessageWithRead, error) {
+	conn := getConn(ctx, r.pool)
+	sql := `
+		SELECT m.id, m.sender_id, m.receiver_id, m.payload, m.created_at,
+			CASE 
+				WHEN m.sender_id = $1 THEN 
+					COALESCE(cr.last_read_at >= m.created_at, false)
+				ELSE false
+			END as is_read
+		FROM messages m
+		LEFT JOIN chat_reads cr ON cr.user_id = $2 AND cr.partner_id = $1
+		WHERE (m.sender_id = $1 AND m.receiver_id = $2) OR (m.sender_id = $2 AND m.receiver_id = $1)
+		ORDER BY m.created_at DESC LIMIT $3 OFFSET $4`
+	rows, err := conn.Query(ctx, sql, partnerID, currentUser, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	messages := []model.MessageWithRead{}
+	for rows.Next() {
+		var msg model.MessageWithRead
+		if err := rows.Scan(&msg.ID, &msg.SenderID, &msg.ReceiverID, &msg.Payload, &msg.CreatedAt, &msg.IsRead); err != nil {
+			return nil, err
+		}
+		messages = append(messages, msg)
+	}
+	return messages, rows.Err()
+}
+
 func (r *MessageRepo) GetConversationPartners(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	conn := getConn(ctx, r.pool)
 	sql := `

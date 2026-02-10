@@ -503,7 +503,8 @@ async function loadMessages(chatUserId) {
         messages.reverse().forEach(msg => {
             const isOutgoing = msg.sender_id === userId;
             if (isOutgoing) {
-                displayMessage(msg, '', 'delivered');
+                const status = msg.is_read ? 'read' : 'delivered';
+                displayMessage(msg, '', status);
             } else {
                 displayMessage(msg, '', '');
             }

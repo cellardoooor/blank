@@ -20,3 +20,8 @@ type Message struct {
 	Payload    []byte    `json:"payload"`
 	CreatedAt  time.Time `json:"created_at"`
 }
+
+type MessageWithRead struct {
+	Message
+	IsRead bool `json:"is_read"`
+}

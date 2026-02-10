@@ -82,7 +82,35 @@ func (s *MessageService) GetHistory(ctx context.Context, user1, user2 uuid.UUID,
 	for i := range messages {
 		decrypted, err := s.encryptor.Decrypt(string(messages[i].Payload))
 		if err != nil {
-			// If decryption fails, keep the original (for backward compatibility)
+			continue
+		}
+		messages[i].Payload = decrypted
+	}
+
+	return messages, nil
+}
+
+func (s *MessageService) GetHistoryWithReadStatus(ctx context.Context, currentUser, partnerID uuid.UUID, limit, offset int) ([]model.MessageWithRead, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("database unavailable")
+	}
+
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	messages, err := s.repo.GetByUserPairWithReadStatus(ctx, currentUser, partnerID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decrypt messages
+	for i := range messages {
+		decrypted, err := s.encryptor.Decrypt(string(messages[i].Payload))
+		if err != nil {
 			continue
 		}
 		messages[i].Payload = decrypted
