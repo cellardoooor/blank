@@ -750,9 +750,59 @@ volumes:
 - Application connects to **Yandex Managed PostgreSQL**
 - Restart policy: unless-stopped
 
-## 10. Infrastructure (Terraform) - Scalable Architecture
+## 10. Infrastructure (Terraform) - Two Deployment Options
 
-### 10.1 Architecture Overview
+### 10.1 Deployment Options Overview
+
+| Option | Location | Architecture | Cost | Use Case |
+|--------|----------|--------------|------|----------|
+| **Min** | `terraform/envs/min/` | Single VM + PostgreSQL + Caddy | ~$7-8/month | Production, personal projects |
+| **Dev** | `terraform/envs/dev/` | ALB + Instance Group + Managed PostgreSQL | ~$65-90/month | High-traffic, enterprise |
+
+**CI/CD Triggers:**
+- Default push → Min deployment (`deploy-min.yml`)
+- Push with `[dev]` tag → Dev deployment (`deploy.yml`)
+
+### 10.2 Min Architecture (Production)
+
+```
+Internet
+    |
+    | HTTPS (443)
+    v
+┌─────────────────────────────────────┐
+│  Single VM (Ubuntu 22.04)           │
+│  ┌─────────────────────────────┐    │
+│  │ Caddy (reverse proxy + SSL) │    │
+│  │ • Automatic HTTPS           │    │
+│  │ • Let's Encrypt certs       │    │
+│  └──────────┬──────────────────┘    │
+│             | HTTP (8080)           │
+│             v                       │
+│  ┌─────────────────────────────┐    │
+│  │ App (Docker container)      │    │
+│  └──────────┬──────────────────┘    │
+│             | PostgreSQL (5432)     │
+│             v                       │
+│  ┌─────────────────────────────┐    │
+│  │ PostgreSQL (Docker)         │    │
+│  │ • Data on persistent disk   │    │
+│  └─────────────────────────────┘    │
+│                                     │
+│  • Static IP (preserved)            │
+│  • Data disk 20GB (persistent)      │
+└─────────────────────────────────────┘
+```
+
+**Min Components:**
+- **VM**: Ubuntu 22.04, 2 vCPU, 2GB RAM, 10GB boot disk
+- **Data Disk**: 20GB HDD for PostgreSQL data and Caddy certs
+- **Caddy**: Automatic HTTPS with Let's Encrypt
+- **App**: Go application in Docker
+- **PostgreSQL**: Database in Docker container
+- **Security Group**: Allows 22 (SSH), 80 (HTTP), 443 (HTTPS)
+
+### 10.3 Dev Architecture (Scalable) [dev]
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -789,7 +839,7 @@ volumes:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 10.2 Components
+### 10.4 Dev Components [dev]
 
 #### 1. Network Module
 - **VPC**: CIDR `10.0.0.0/16`
@@ -853,7 +903,7 @@ volumes:
 - **Domain**: Configured via `DOMAIN` environment variable
 - **Certificate**: Let's Encrypt (auto) or imported
 
-### 10.3 Security Groups Detail
+### 10.5 Dev Security Groups Detail [dev]
 
 #### ALB Security Group
 ```
@@ -883,14 +933,14 @@ Egress:
   - None (managed service)
 ```
 
-### 10.4 VM Lifecycle Strategy
+### 10.6 Dev VM Lifecycle Strategy [dev]
 - **Instance Group**: Managed by Yandex Compute
 - **Rolling Updates**: Replace VMs one by one during deployment
 - **Health Checks**: VM removed from LB if unhealthy
 - **Auto-healing**: Automatic recreation of failed VMs
 - **Immutable**: Each VM is stateless, ephemeral
 
-### 10.5 Cloud-init Stages
+### 10.7 Dev Cloud-init Stages [dev]
 1. Update packages
 2. Configure Docker
 3. Login to Docker Hub (if private registry)
@@ -899,7 +949,30 @@ Egress:
 6. Start application with env vars from metadata
 7. Register with ALB via health checks
 
-### 10.6 Variables
+### 10.8 Variables
+
+#### Min Deployment Variables
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| yc_token | string | - | YC OAuth token |
+| yc_cloud_id | string | - | YC Cloud ID |
+| yc_folder_id | string | - | YC Folder ID |
+| zone | string | ru-central1-a | Availability zone |
+| docker_image | string | - | Docker image URL |
+| jwt_secret | string | - | JWT signing secret |
+| jwt_duration | string | `24h` | Token lifetime |
+| db_user | string | `messenger` | PostgreSQL user |
+| db_password | string | - | PostgreSQL password |
+| db_name | string | `messenger` | PostgreSQL database name |
+| http_addr | string | `:8080` | Server bind address |
+| default_user | string | - | Default username for seeding |
+| default_password | string | - | Default password for seeding |
+| encryption_key | string | - | Message encryption key |
+| domain | string | - | Domain name |
+
+#### Dev Deployment Variables [dev]
+
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | yc_token | string | - | YC OAuth token |
@@ -917,76 +990,106 @@ Egress:
 | http_addr | string | `:8080` | Server bind address |
 | default_user | string | - | Default username for seeding |
 | default_password | string | - | Default password for seeding |
+| encryption_key | string | - | Message encryption key |
 | domain | string | - | Domain name for ALB |
-| cert_type | string | `letsencrypt` | Certificate type (letsencrypt/imported) |
+| cert_type | string | `letsencrypt` | Certificate type |
+| service_account_id | string | - | Service account for Instance Group |
+| min_instances | number | 2 | Minimum VM count |
+| max_instances | number | 4 | Maximum VM count |
 
 ## 11. CI/CD Pipeline
 
 ### 11.1 Architecture
-Single unified workflow for build and deployment (`.github/workflows/deploy.yml`):
 
-**Triggers**: Push to `main` branch, manual (`workflow_dispatch`)
+Two separate workflows for different deployment options:
+
+| Workflow | File | Trigger | Deployment |
+|----------|------|---------|------------|
+| **Deploy Min** | `deploy-min.yml` | Push to `main` (without `[dev]`) | Min (single VM) |
+| **Deploy Dev** | `deploy.yml` | Push to `main` with `[dev]` tag | Dev (scalable) |
+
+### 11.2 Deploy Min Workflow
+
+**File**: `.github/workflows/deploy-min.yml`
+
+**Trigger**: Push to `main` branch (skipped if commit message contains `[dev]`)
 
 **Jobs**:
+- **Build**: Build and push Docker image with SHA tag
+- **Deploy-min**: Terraform apply in `terraform/envs/min/`
 
-**Job 1: Build**
-1. Checkout code
-2. Setup Docker Buildx
-3. Login to Docker Hub
-4. Extract metadata and generate SHA tag
-5. Build and push Docker image with SHA tag
+**Outputs**:
+- VM IP address
+- Domain URL
+- Docker image tag
 
-**Job 2: Deploy** (depends on Build)
-1. Checkout code
-2. Setup Terraform
-3. Terraform Init with S3 backend
-4. Terraform Apply:
-   - Creates/updates all infrastructure (ALB, Instance Group, Managed PostgreSQL)
-   - Uses newly built Docker image
-   - Triggers rolling update automatically
+### 11.3 Deploy Dev Workflow [dev]
 
-### 11.2 Execution Order
-**Every deployment:**
-1. Push to `main` triggers workflow
-2. Build job creates new Docker image with SHA tag
-3. Deploy job runs Terraform apply with new image
-4. Terraform detects image change and triggers rolling update
-5. Zero-downtime deployment complete
+**File**: `.github/workflows/deploy.yml`
 
-### 11.3 GitHub Actions Workflow
-**Workflow**: `.github/workflows/deploy.yml`
-- Single file handles both build and deployment
-- No separate infrastructure/application pipelines
-- Rolling updates happen automatically via Terraform Instance Group
-- Outputs: ALB_IP, domain, database_host, instance_count, certificate_status
+**Trigger**: Push to `main` branch (only if commit message contains `[dev]`)
 
-### 11.4 Required Secrets
-| Secret | Description | How to Generate |
-|--------|-------------|-----------------|
-| `DOCKERHUB_USERNAME` | Docker Hub username | Docker Hub → Account Settings |
-| `DOCKERHUB_TOKEN` | Docker Hub access token | Docker Hub → Security → New Access Token |
-| `YC_TOKEN` | Yandex Cloud OAuth token | [Get YC_TOKEN](#getting-yc_token) |
-| `YC_S3_ACCESS_KEY` | S3 backend access key | [Create S3 Keys](#creating-s3-keys) |
-| `YC_S3_SECRET_KEY` | S3 backend secret key | [Create S3 Keys](#creating-s3-keys) |
-| `TF_STATE_BUCKET` | Terraform state bucket name | Create unique bucket name |
-| `JWT_SECRET` | JWT signing secret | `openssl rand -base64 32` |
-| `DB_PASSWORD` | Managed PostgreSQL password | Strong password (12+ chars) |
-| `ENCRYPTION_KEY` | Message encryption key | `openssl rand -base64 32` (min 32 chars) |
-| `YC_SERVICE_ACCOUNT_ID` | Service account for Instance Group | [Create Service Account](#service-account) |
-| `DEFAULT_USER` | Default admin username | Optional, e.g., `admin` |
-| `DEFAULT_PASSWORD` | Default admin password | Optional, e.g., `admin123` |
+**Jobs**:
+- **Build**: Build and push Docker image with SHA tag
+- **Deploy**: Terraform apply in `terraform/envs/dev/`
 
-### 11.5 Required Variables (GitHub Variables)
-| Variable | Description | Default Value |
-|----------|-------------|---------------|
-| `YC_CLOUD_ID` | Yandex Cloud ID | - |
-| `YC_FOLDER_ID` | Yandex Folder ID | - |
-| `DOMAIN` | Domain name (e.g., messenger.example.com) | - |
-| `DB_USER` | PostgreSQL username | `messenger` |
-| `DB_NAME` | PostgreSQL database name | `messenger` |
-| `JWT_DURATION` | Token lifetime | `24h` |
-| `MIN_INSTANCES` | Minimum VM count | `2` |
-| `MAX_INSTANCES` | Maximum VM count | `4` |
+**Outputs**:
+- ALB IP address
+- Domain URL
+- Database host
+- Instance count
+- Certificate status
+
+### 11.4 Execution Flow
+
+**Min Deployment (default):**
+```
+git push origin main
+    → deploy-min.yml triggers
+    → Build Docker image
+    → Terraform apply (min)
+    → Single VM updated
+```
+
+**Dev Deployment:**
+```
+git commit -m "message [dev]"
+git push origin main
+    → deploy.yml triggers
+    → Build Docker image
+    → Terraform apply (dev)
+    → Instance Group rolling update
+```
+
+### 11.5 Required Secrets
+
+| Secret | Description | Min | Dev |
+|--------|-------------|-----|-----|
+| `DOCKERHUB_USERNAME` | Docker Hub username | ✓ | ✓ |
+| `DOCKERHUB_TOKEN` | Docker Hub access token | ✓ | ✓ |
+| `YC_TOKEN` | Yandex Cloud OAuth token | ✓ | ✓ |
+| `YC_S3_ACCESS_KEY` | S3 backend access key | ✓ | ✓ |
+| `YC_S3_SECRET_KEY` | S3 backend secret key | ✓ | ✓ |
+| `TF_STATE_BUCKET` | Terraform state bucket name | ✓ | ✓ |
+| `JWT_SECRET` | JWT signing secret | ✓ | ✓ |
+| `DB_PASSWORD` | PostgreSQL password | ✓ | ✓ |
+| `ENCRYPTION_KEY` | Message encryption key | ✓ | ✓ |
+| `DEFAULT_USER` | Default admin username | ✓ | ✓ |
+| `DEFAULT_PASSWORD` | Default admin password | ✓ | ✓ |
+| `YC_SERVICE_ACCOUNT_ID` | Service account for Instance Group | - | ✓ |
+
+### 11.6 Required Variables (GitHub Variables)
+
+| Variable | Description | Default | Min | Dev |
+|----------|-------------|---------|-----|-----|
+| `YC_CLOUD_ID` | Yandex Cloud ID | - | ✓ | ✓ |
+| `YC_FOLDER_ID` | Yandex Folder ID | - | ✓ | ✓ |
+| `DOMAIN` | Domain name | - | ✓ | ✓ |
+| `DB_USER` | PostgreSQL username | `messenger` | ✓ | ✓ |
+| `DB_NAME` | PostgreSQL database name | `messenger` | ✓ | ✓ |
+| `JWT_DURATION` | Token lifetime | `24h` | ✓ | ✓ |
+| `MIN_INSTANCES` | Minimum VM count | `2` | - | ✓ |
+| `MAX_INSTANCES` | Maximum VM count | `4` | - | ✓ |
 
 ## 12. Dependencies
 
@@ -1269,15 +1372,35 @@ When modifying this project, maintain:
 - **Repository**: GitHub
 - **Issues**: GitHub Issues
 - **Documentation**: This file + README.md
-- **Deployment Guide**: DEPLOY.md
+- **Deployment Guides**: DEPLOY_MIN.md (Min), DEPLOY.md (Dev)
 
 ---
 
-**Version**: 2.6
-**Last Updated**: 2026-02-10
+**Version**: 2.7
+**Last Updated**: 2026-02-11
 **Maintainer**: AI Assistant
 
 ## Changelog
+
+### Version 2.7 (2026-02-11) - Two Deployment Options
+- **Deployment Options**:
+  - **Min**: Single VM + PostgreSQL container + Caddy (~$7-8/month)
+  - **Dev** [dev]: ALB + Instance Group + Managed PostgreSQL (~$65-90/month)
+- **CI/CD Workflows**:
+  - `deploy-min.yml`: Default deployment (push without `[dev]`)
+  - `deploy.yml`: Scalable deployment (push with `[dev]` tag)
+- **New Files**:
+  - `terraform/envs/min/` - Min deployment configuration
+  - `terraform/envs/min/cloud_init_min.yaml` - Cloud-init for single VM
+  - `.github/workflows/deploy-min.yml` - Min CI/CD workflow
+  - `DEPLOY_MIN.md` - Min deployment documentation
+- **Infrastructure**:
+  - Min: Ubuntu VM + Caddy (auto HTTPS) + PostgreSQL container + Data disk
+  - Dev: Unchanged, triggered by `[dev]` in commit message
+- **Documentation**:
+  - README.md: Added deployment options table and dual architecture diagrams
+  - TECHNICAL_SPEC.md: Added Section 10.1-10.2 for Min architecture
+  - Updated CI/CD section with two workflows
 
 ### Version 2.6 (2026-02-10) - API is_read & Mobile UI
 - **API Enhancement**:

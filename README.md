@@ -14,7 +14,18 @@ Production-ready messenger backend on Go with PostgreSQL and WebSocket support.
 - Docker support
 - Terraform infrastructure for Yandex Cloud
 - Custom Chicago font for all UI text
-- **Scalable Architecture**: Load Balancer + Instance Group + Managed PostgreSQL
+
+## Deployment Options
+
+| Option | Description | Cost | Use Case |
+|--------|-------------|------|----------|
+| **Min** | Single VM + PostgreSQL container + Caddy | ~$5-10/мес | Production, personal projects |
+| **Dev** [dev] | ALB + Instance Group + Managed PostgreSQL | ~$65-90/мес | High-traffic, enterprise |
+
+- **Min**: `/terraform/envs/min/` - минимальный деплой на одной VM
+- **Dev**: `/terraform/envs/dev/` - масштабируемая архитектура (push с тегом `[dev]`)
+
+See [DEPLOY_MIN.md](DEPLOY_MIN.md) for Min deployment, [DEPLOY.md](DEPLOY.md) for Dev deployment.
 
 ## Quick Start
 
@@ -60,6 +71,24 @@ docker push cellardooor/blank:latest
 
 ## Architecture
 
+### Min (Production)
+
+```
+Internet
+    |
+    | HTTPS (443)
+    v
+┌─────────────────────────────────────┐
+│  Single VM (Ubuntu + Docker)        │
+│  • Caddy (TLS + reverse proxy)      │
+│  • App container (Go backend)       │
+│  • PostgreSQL container             │
+│  • Static IP + Data disk            │
+└─────────────────────────────────────┘
+```
+
+### Dev [dev] (Scalable)
+
 ```
 Internet
     |
@@ -68,26 +97,17 @@ Internet
 ┌─────────────────────────────────────┐
 │  Yandex Application Load Balancer   │
 │  • TLS Termination (Let's Encrypt)  │
-│  • HTTP → HTTPS redirect            │
-│  • Health checks                    │
-│  • Auto-renewal (90 days)           │
 └──────────────┬──────────────────────┘
-               | HTTP (8080)
-               v
+                | HTTP (8080)
+                v
 ┌─────────────────────────────────────┐
 │  Yandex Compute Instance Group      │
-│  • Min: 2 VMs                       │
-│  • Auto-healing                     │
-│  • Rolling updates                  │
-│  • NAT Gateway (Internet access)    │
+│  • Min: 2 VMs, Max: 4 VMs           │
 └──────────────┬──────────────────────┘
-               | PostgreSQL (6432) + SSL
-               v
+                | PostgreSQL (6432) + SSL
+                v
 ┌─────────────────────────────────────┐
 │  Yandex Managed PostgreSQL          │
-│  • Version 15                       │
-│  • Private subnet                   │
-│  • Automatic backups                │
 └─────────────────────────────────────┘
 ```
 
@@ -115,38 +135,38 @@ Internet
 1. **Yandex Cloud Account**: [cloud.yandex.ru](https://cloud.yandex.ru)
 2. **YC_TOKEN**: OAuth token for Terraform
 3. **Docker Hub Account**: For pushing images
-4. **Domain**: A domain name pointed to Yandex Cloud (for HTTPS)
+4. **Domain**: A domain name pointed to Yandex Cloud
 
-### Infrastructure Setup
+### Option 1: Min Deployment (Production)
 
 ```bash
-cd terraform/envs/dev
+cd terraform/envs/min
 
 # Copy and edit variables
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your YC_TOKEN and DOMAIN
 
-# Deploy infrastructure
+# Deploy
 terraform init
-terraform plan
 terraform apply
-
-# Get ALB IP and DNS challenge records
-terraform output alb_ip_address
-terraform output dns_challenge_records
-
-# Add DNS records (see DEPLOY.md for details)
-# 1. A-record for your domain → ALB IP
-# 2. CNAME for Let's Encrypt validation
-
-# Check certificate status
-terraform output certificate_status
-# Wait for ISSUED status, then access https://<your-domain>
 ```
+
+See [DEPLOY_MIN.md](DEPLOY_MIN.md) for full details.
+
+### Option 2: Dev Deployment [dev]
+
+Add `[dev]` to commit message to trigger Dev deployment:
+
+```bash
+git commit -m "your message [dev]"
+```
+
+See [DEPLOY.md](DEPLOY.md) for full details.
 
 ### CI/CD
 
-Single workflow deployment (`.github/workflows/deploy.yml`):
+Two separate workflows:
+- **deploy-min.yml**: Default deployment (Min architecture)
+- **deploy.yml**: Scalable deployment (triggered by `[dev]` tag in commit)
 
 **Build & Deploy:**
 - Builds Docker image with SHA tag
@@ -161,35 +181,40 @@ Single workflow deployment (`.github/workflows/deploy.yml`):
 - `YC_TOKEN` - Yandex Cloud OAuth token
 - `YC_S3_ACCESS_KEY` / `YC_S3_SECRET_KEY` - S3 backend credentials
 - `TF_STATE_BUCKET` - S3 bucket name for Terraform state
-- `JWT_SECRET` - JWT signing secret (generate with `openssl rand -base64 32`)
-- `DB_PASSWORD` - Managed PostgreSQL password
-- `ENCRYPTION_KEY` - Message encryption key (minimum 32 characters, generate with `openssl rand -base64 32`)
-- `YC_SERVICE_ACCOUNT_ID` - Service account for Instance Group (optional)
-- `DEFAULT_USER` / `DEFAULT_PASSWORD` - Default admin user credentials (optional)
+- `JWT_SECRET` - JWT signing secret
+- `DB_PASSWORD` - PostgreSQL password
+- `ENCRYPTION_KEY` - Message encryption key
+- `DEFAULT_USER` / `DEFAULT_PASSWORD` - Default admin credentials (optional)
 
 **Required Variables:**
 - `YC_CLOUD_ID` - Yandex Cloud ID
 - `YC_FOLDER_ID` - Yandex Folder ID
-- `DOMAIN` - Domain name (e.g., messenger.example.com)
+- `DOMAIN` - Domain name
 - `JWT_DURATION` - Token lifetime (default: 24h)
 - `DB_USER` - Database user (default: messenger)
 - `DB_NAME` - Database name (default: messenger)
-- `MIN_INSTANCES` - Minimum VM count (default: 2)
-- `MAX_INSTANCES` - Maximum VM count (default: 4)
+- `MIN_INSTANCES` / `MAX_INSTANCES` - Scaling (Dev only, default: 2/4)
 
 ## Environment Variables
 
-### Application
+### Application (Min)
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `JWT_SECRET` | JWT signing secret | required |
 | `JWT_DURATION` | Token lifetime | `24h` |
 | `ENCRYPTION_KEY` | Message encryption key (min 32 chars) | required |
-| `DB_HOST` | Managed PostgreSQL host | required |
 | `DB_USER` | Database user | required |
 | `DB_PASSWORD` | Database password | required |
 | `DB_NAME` | Database name | required |
+| `DEFAULT_USER` | Default admin username | optional |
+| `DEFAULT_PASSWORD` | Default admin password | optional |
+
+### Application (Dev - additional)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DB_HOST` | Managed PostgreSQL host | required |
 | `DB_SSLMODE` | PostgreSQL SSL mode | `require` |
 
 ### Local Development Only
@@ -215,13 +240,18 @@ yc iam create-token
 ## Key Features
 
 - **Stateless**: JWT tokens only, no sessions
-- **Highly Available**: Min 2 VMs with auto-healing
-- **Scalable**: Instance Group with auto-scaling support
-- **Secure**: HTTPS with Let's Encrypt, SSL for database, message encryption (AES-256-GCM), bcrypt passwords
-- **Zero-downtime**: Rolling updates via Instance Group
-- **Auto SSL**: Let's Encrypt certificates with automatic renewal (90 days)
+- **Secure**: HTTPS, message encryption (AES-256-GCM), bcrypt passwords
+- **Zero-downtime**: Rolling updates (Dev) or VM replacement (Min)
+- **Auto SSL**: Caddy (Min) or Let's Encrypt (Dev)
 - **Auto-migrations**: Database tables created automatically on startup
 - **Frontend**: Custom Chicago font applied to all UI elements
+
+## Cost
+
+| Deployment | Infrastructure | Approx. Cost |
+|------------|---------------|--------------|
+| Min | 1 VM (2 cores, 2GB) | ~$5-10/month |
+| Dev | ALB + 2 VMs + Managed DB | ~$65-90/month |
 
 ## License
 
