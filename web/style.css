@@ -605,6 +605,14 @@ input::placeholder, textarea::placeholder {
         display: flex;
     }
     
+    #chat-window.active #active-chat {
+        display: flex;
+    }
+    
+    #chat-window.active #empty-state {
+        display: none;
+    }
+    
     #new-chat-btn {
         padding: 8px 12px;
         font-size: 13px;

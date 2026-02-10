@@ -520,7 +520,7 @@ function displayMessage(msg, status = '', forcedStatus = '') {
     const container = document.getElementById('messages');
     const isOutgoing = msg.sender_id === userId;
     
-    const actualStatus = forcedStatus || (status || (isOutgoing ? 'sending' : 'delivered'));
+    const actualStatus = forcedStatus || status || (isOutgoing ? 'sending' : '');
     
     const div = document.createElement('div');
     div.className = `message ${isOutgoing ? 'outgoing' : 'incoming'} ${actualStatus}`;
