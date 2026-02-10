@@ -143,6 +143,13 @@ resource "yandex_compute_instance" "min_vm" {
 
   metadata = {
     user-data = local.cloud_init
-    version   = md5(local.cloud_init)
   }
+
+  lifecycle {
+    replace_triggered_by = [terraform_data.vm_replace]
+  }
+}
+
+resource "terraform_data" "vm_replace" {
+  input = timestamp()
 }
