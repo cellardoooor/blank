@@ -20,6 +20,7 @@ let allUsers = [];
 let conversationPartners = new Set();
 let messagesMap = new Map(); // userId -> messages array
 let messageStatus = new Map(); // messageId -> 'sending' | 'delivered' | 'read'
+let viewMode = 'sidebar'; // 'sidebar' | 'chat' - for mobile
 
 const API_URL = '/api';
 
@@ -265,7 +266,14 @@ function handleIncomingMessage(msg) {
                 displayMessage(msg, '', 'delivered');
             }
         } else {
-            displayMessage(msg, '', 'delivered');
+            displayMessage(msg, '', '');
+        }
+    } else if (msg.sender_id !== userId) {
+        // Incoming message in non-active chat - increment unread
+        const chat = chats.get(partnerId);
+        if (chat) {
+            chat.unreadCount = (chat.unreadCount || 0) + 1;
+            renderChatList();
         }
     }
 }
@@ -423,6 +431,13 @@ async function selectChat(chatUserId) {
     
     if (!chat) return;
     
+    // Mobile: switch to chat view
+    if (window.innerWidth <= 600) {
+        viewMode = 'chat';
+        document.getElementById('chat-window').classList.add('active');
+        document.getElementById('sidebar').classList.add('hidden-mobile');
+    }
+    
     // Update UI
     document.getElementById('empty-state').style.display = 'none';
     document.getElementById('active-chat').style.display = 'flex';
@@ -443,6 +458,22 @@ async function selectChat(chatUserId) {
     
     // Focus input
     document.getElementById('message-input').focus();
+}
+
+function goToSidebar() {
+    viewMode = 'sidebar';
+    currentChat = null;
+    
+    // Mobile: hide chat, show sidebar
+    document.getElementById('chat-window').classList.remove('active');
+    document.getElementById('sidebar').classList.remove('hidden-mobile');
+    
+    // Reset chat view
+    document.getElementById('active-chat').style.display = 'none';
+    document.getElementById('empty-state').style.display = 'flex';
+    
+    // Update sidebar
+    renderChatList();
 }
 
 function sendReadStatus(partnerId) {
@@ -919,6 +950,24 @@ function setupEventListeners() {
         if (e.key === 'Escape') {
             closeNewChatModal();
             closeChangePasswordModal();
+        }
+    });
+    
+    // Swipe to go back on mobile
+    let touchStartX = 0;
+    document.addEventListener('touchstart', function(e) {
+        touchStartX = e.touches[0].clientX;
+    });
+    
+    document.addEventListener('touchend', function(e) {
+        if (window.innerWidth > 600) return;
+        
+        const touchEndX = e.changedTouches[0].clientX;
+        const diff = touchEndX - touchStartX;
+        
+        // Swipe right on chat → go to sidebar
+        if (diff > 100 && viewMode === 'chat') {
+            goToSidebar();
         }
     });
 }
