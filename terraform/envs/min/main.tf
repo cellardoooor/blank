@@ -146,7 +146,8 @@ resource "yandex_compute_instance" "min_vm" {
   }
 
   lifecycle {
-    replace_triggered_by = [terraform_data.vm_replace]
+    create_before_destroy = false
+    replace_triggered_by  = [terraform_data.vm_replace]
   }
 }
 
