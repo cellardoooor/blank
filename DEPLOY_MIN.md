@@ -181,7 +181,7 @@ terraform apply
 terraform/
 ├── envs/
 │   ├── min/                 # Min deployment (production)
-│   │   ├── main.tf         # VPC + Subnet + Single VM + PostgreSQL + Caddy
+│   │   ├── main.tf         # VPC + Subnet + VM + PostgreSQL + Caddy (no module)
 │   │   ├── variables.tf    # Переменные
 │   │   ├── outputs.tf      # Выходные значения
 │   │   ├── backend.tf      # S3 backend

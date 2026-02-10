@@ -95,13 +95,13 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 │   │   └── embed.go               # embed.FS for embedding migrations
 ├── terraform/                  # Infrastructure as Code
 │   ├── envs/
-│   │   ├── min/                # Min deployment (single VM + PostgreSQL + Caddy)
-│   │   │   ├── main.tf         # VPC, subnet, VM, security group
+│   │   ├── min/                # Min deployment (own VPC, single VM)
+│   │   │   ├── main.tf         # VPC, subnet, VM, security group (no module)
 │   │   │   ├── variables.tf
 │   │   │   ├── outputs.tf
 │   │   │   └── cloud_init_min.yaml
 │   │   └── dev/                # Dev deployment [dev] (ALB + Instance Group + Managed PostgreSQL)
-│   ├── network/                # Network module (for Dev only)
+│   ├── network/                # Network module (for Dev only: NAT, ALB, DB subnets)
 │   ├── alb/                    # Application Load Balancer with HTTPS
 │   ├── compute/                # Instance Group with auto-scaling
 │   └── database/               # Yandex Managed PostgreSQL
@@ -802,8 +802,8 @@ Internet
 ```
 
 **Min Components:**
-- **VPC**: Single network (10.0.0.0/16), created directly in min/main.tf
-- **Subnet**: Single subnet (10.0.2.0/24), no NAT Gateway
+- **VPC**: Created directly in min/main.tf (no network module)
+- **Subnet**: Single subnet (10.0.1.0/24) - no NAT Gateway, VM has public IP
 - **VM**: Ubuntu 22.04, 2 vCPU, 2GB RAM, 10GB boot disk
 - **Data Disk**: 20GB HDD for PostgreSQL data and Caddy certs
 - **Caddy**: Automatic HTTPS with Let's Encrypt
@@ -1406,7 +1406,7 @@ When modifying this project, maintain:
   - `DEPLOY_MIN.md` - Min deployment documentation
 - **Infrastructure**:
   - Min: Ubuntu VM + Caddy (auto HTTPS) + PostgreSQL container + Data disk
-  - Min: Network (VPC + subnet) created directly in min/main.tf, no network module
+  - Min: Own VPC and subnet (no network module, no state conflicts with Dev)
   - Dev: Unchanged, triggered by `[dev]` in commit message, uses network module
 - **Documentation**:
   - README.md: Added deployment options table and dual architecture diagrams

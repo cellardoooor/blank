@@ -67,7 +67,7 @@ docker push cellardooor/blank:latest
 ├── web/                 # Frontend static files (Chicago font)
 ├── terraform/           # Infrastructure as Code
 │   ├── envs/
-│   │   ├── min/         # Min deployment (VPC, VM, PostgreSQL)
+│   │   ├── min/         # Min deployment (own VPC, single VM)
 │   │   └── dev/         # Dev deployment [dev] (ALB, Instance Group, Managed PostgreSQL)
 │   └── network/         # Network module (for Dev only)
 └── internal/migrations/ # Database migrations (embedded in binary)
