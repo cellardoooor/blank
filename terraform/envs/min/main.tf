@@ -1,21 +1,14 @@
-# Network module - creates VPC and subnets
-module "network" {
-  source = "../../network"
+# VPC Network
+resource "yandex_vpc_network" "main" {
+  name = "${var.environment}-messenger-vpc"
+}
 
-  vpc_name = "${var.environment}-messenger-vpc"
-  vpc_cidr = "10.0.0.0/16"
-  zone     = var.zone
-
-  public_subnet_name = "${var.environment}-messenger-public"
-  public_subnet_cidr = "10.0.1.0/24"
-  app_subnet_name    = "${var.environment}-messenger-app"
-  app_subnet_cidr    = "10.0.2.0/24"
-  db_subnet_name     = "${var.environment}-messenger-db"
-  db_subnet_cidr     = "10.0.3.0/24"
-
-  alb_sg_name = "${var.environment}-messenger-alb-sg"
-  app_sg_name = "${var.environment}-messenger-app-sg"
-  db_sg_name  = "${var.environment}-messenger-db-sg"
+# Subnet for VM (no NAT Gateway, VM has public IP)
+resource "yandex_vpc_subnet" "public" {
+  name           = "${var.environment}-messenger-public"
+  zone           = var.zone
+  network_id     = yandex_vpc_network.main.id
+  v4_cidr_blocks = ["10.0.1.0/24"]
 }
 
 data "yandex_compute_image" "ubuntu" {
@@ -24,7 +17,7 @@ data "yandex_compute_image" "ubuntu" {
 
 resource "yandex_vpc_security_group" "min_vm" {
   name        = "${var.environment}-min-vm-sg"
-  network_id  = module.network.vpc_id
+  network_id  = yandex_vpc_network.main.id
   description = "Security group for min VM"
 
   ingress {
@@ -120,7 +113,7 @@ resource "yandex_compute_instance" "min_vm" {
   }
 
   network_interface {
-    subnet_id          = module.network.public_subnet_id
+    subnet_id          = yandex_vpc_subnet.public.id
     security_group_ids = [yandex_vpc_security_group.min_vm.id]
     nat                = true
     nat_ip_address     = yandex_vpc_address.static_ip.external_ipv4_address[0].address
