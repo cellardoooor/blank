@@ -54,7 +54,7 @@ secrets/
 # Local database
 *.db
 postgres_data/
-
+ 
 # Build artifacts
 dist/
 build/
