@@ -19,13 +19,13 @@ variable "cores" {
 variable "memory" {
   description = "Memory in GB per instance"
   type        = number
-  default     = 4
+  default     = 1
 }
 
 variable "disk_size" {
   description = "Boot disk size in GB"
   type        = number
-  default     = 20
+  default     = 10
 }
 
 variable "subnet_id" {
