@@ -143,5 +143,6 @@ resource "yandex_compute_instance" "min_vm" {
 
   metadata = {
     user-data = local.cloud_init
+    version   = md5(local.cloud_init)
   }
 }
