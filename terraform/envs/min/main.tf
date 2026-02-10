@@ -118,14 +118,14 @@ resource "yandex_compute_instance" "min_vm" {
 
   resources {
     cores  = 2
-    memory = 4
+    memory = 2
   }
 
   boot_disk {
     initialize_params {
       image_id = data.yandex_compute_image.ubuntu.id
-      type     = "network-ssd"
-      size     = 20
+      type     = "network-hdd"
+      size     = 10
     }
   }
 
