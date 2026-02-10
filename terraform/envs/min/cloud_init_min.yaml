@@ -1,5 +1,5 @@
 #cloud-config
-# Migration VM - PostgreSQL + App + Caddy
+# Min VM - PostgreSQL + App + Caddy
 
 users:
   - name: ubuntu
@@ -80,9 +80,9 @@ write_files:
     content: |
       #!/bin/bash
       set -e
-      exec > >(tee /dev/ttyS0 | tee -a /var/log/migration.log) 2>&1
+      exec > >(tee /dev/ttyS0 | tee -a /var/log/startup.log) 2>&1
 
-      echo "=== Starting migration VM at $(date) ==="
+      echo "=== Starting min VM at $(date) ==="
 
       DISK="/dev/vdb"
       if [ ! -b "$DISK" ]; then
@@ -113,47 +113,18 @@ write_files:
       sed -i "s#DEFAULT_PASSWORD_PLACEHOLDER#$DEFAULT_PASSWORD_DECODED#g" /opt/messenger/docker-compose.yml
       sed -i "s#ENCRYPTION_KEY_PLACEHOLDER#$ENCRYPTION_KEY_DECODED#g" /opt/messenger/docker-compose.yml
 
-      echo "=== Starting PostgreSQL container ==="
-      cd /opt/messenger
-      docker compose up -d postgres
-
-      echo "=== Waiting for PostgreSQL to be ready ==="
-      for i in $(seq 1 30); do
-        if docker exec postgres pg_isready -U ${db_user} -d ${db_name}; then
-          echo "PostgreSQL is ready!"
-          break
-        fi
-        echo "Waiting for PostgreSQL... ($i/30)"
-        sleep 2
-      done
-
-      if [ ! -f /mnt/data/.migrated ]; then
-        echo "=== Starting migration from Managed PostgreSQL ==="
-        SOURCE_HOST="${source_db_host}"
-        SOURCE_PORT="${source_db_port}"
-
-        echo "Source: $SOURCE_HOST:$SOURCE_PORT"
-        echo "Target: localhost:5432"
-
-        PGPASSWORD="${db_password}" pg_dump -h $SOURCE_HOST -p $SOURCE_PORT -U ${db_user} ${db_name} | docker exec -i postgres psql -U ${db_user} -d ${db_name}
-
-        touch /mnt/data/.migrated
-        echo "=== Migration completed ==="
-      else
-        echo "=== Migration already done, skipping ==="
-      fi
-
       echo "=== Starting all services ==="
+      cd /opt/messenger
       docker compose up -d
 
       echo "=== Waiting for services ==="
-      sleep 10
+      sleep 15
       docker compose ps
 
       echo "=== Caddy logs (SSL certificate) ==="
       docker logs caddy 2>&1 | tail -20
 
-      echo "=== Migration VM ready at $(date) ==="
+      echo "=== Min VM ready at $(date) ==="
       echo "HTTPS: https://${domain}"
     owner: root:root
     permissions: '0755'
@@ -163,10 +134,8 @@ runcmd:
   - [ apt-get, install, -y, ca-certificates, curl, gnupg, lsb-release ]
   - [ sh, -c, "mkdir -p /etc/apt/keyrings && curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg" ]
   - [ sh, -c, "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable\" | tee /etc/apt/sources.list.d/docker.list" ]
-  - [ sh, -c, "curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg" ]
-  - [ sh, -c, "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main\" | tee /etc/apt/sources.list.d/postgresql.list" ]
   - [ apt-get, update ]
-  - [ apt-get, install, -y, docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin, postgresql-client-15 ]
+  - [ apt-get, install, -y, docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin ]
   - [ systemctl, start, docker ]
   - [ systemctl, enable, docker ]
   - [ sh, -c, "sleep 5" ]

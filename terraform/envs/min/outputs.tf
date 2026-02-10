@@ -27,8 +27,3 @@ output "data_disk_id" {
   description = "Data disk ID"
   value       = yandex_compute_disk.data_disk.id
 }
-
-output "source_db_host" {
-  description = "Source database host (Managed PostgreSQL)"
-  value       = module.database.cluster_host
-}
