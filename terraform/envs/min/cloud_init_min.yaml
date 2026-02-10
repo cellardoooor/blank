@@ -1,0 +1,171 @@
+#cloud-config
+# Migration VM - PostgreSQL + App + Caddy
+
+users:
+  - name: ubuntu
+    groups: [ sudo, docker ]
+    shell: /bin/bash
+    sudo: [ "ALL=(ALL) NOPASSWD:ALL" ]
+
+write_files:
+  - path: /opt/messenger/docker-compose.yml
+    content: |
+      services:
+        postgres:
+          image: postgres:15
+          container_name: postgres
+          restart: unless-stopped
+          environment:
+            POSTGRES_USER: ${db_user}
+            POSTGRES_PASSWORD: ${db_password}
+            POSTGRES_DB: ${db_name}
+          volumes:
+            - /mnt/data/postgres:/var/lib/postgresql/data
+          ports:
+            - "5432:5432"
+          healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${db_user} -d ${db_name}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+
+        app:
+          image: ${docker_image}
+          container_name: ${container_name}
+          restart: unless-stopped
+          depends_on:
+            postgres:
+              condition: service_healthy
+          environment:
+            HTTP_ADDR: ${http_addr}
+            JWT_SECRET: JWT_SECRET_PLACEHOLDER
+            JWT_DURATION: ${jwt_duration}
+            DB_HOST: postgres
+            DB_PORT: 5432
+            DB_USER: ${db_user}
+            DB_PASSWORD: DB_PASSWORD_PLACEHOLDER
+            DB_NAME: ${db_name}
+            DB_SSLMODE: disable
+            DEFAULT_USER: DEFAULT_USER_PLACEHOLDER
+            DEFAULT_PASSWORD: DEFAULT_PASSWORD_PLACEHOLDER
+            ENCRYPTION_KEY: ENCRYPTION_KEY_PLACEHOLDER
+          expose:
+            - "8080"
+
+        caddy:
+          image: caddy:2
+          container_name: caddy
+          restart: unless-stopped
+          ports:
+            - "80:80"
+            - "443:443"
+          volumes:
+            - /opt/messenger/Caddyfile:/etc/caddy/Caddyfile:ro
+            - caddy_data:/data
+            - caddy_config:/config
+          depends_on:
+            - app
+
+      volumes:
+        caddy_data:
+        caddy_config:
+
+    owner: root:root
+    permissions: '0644'
+
+  - path: /opt/messenger/Caddyfile
+    content: |
+      ${domain} {
+          reverse_proxy app:8080
+      }
+    owner: root:root
+    permissions: '0644'
+
+  - path: /opt/messenger/start.sh
+    content: |
+      #!/bin/bash
+      set -e
+      exec > >(tee /dev/ttyS0 | tee -a /var/log/migration.log) 2>&1
+
+      echo "=== Starting migration VM at $(date) ==="
+
+      DISK="/dev/vdb"
+      if [ ! -b "$DISK" ]; then
+        echo "ERROR: Secondary disk $DISK not found"
+        exit 1
+      fi
+
+      echo "=== Formatting and mounting data disk ==="
+      if ! blkid "$DISK"; then
+        mkfs.ext4 -F "$DISK"
+      fi
+
+      mkdir -p /mnt/data
+      mount "$DISK" /mnt/data
+      echo "$DISK /mnt/data ext4 defaults 0 0" >> /etc/fstab
+
+      mkdir -p /mnt/data/postgres
+      chown -R 999:999 /mnt/data/postgres
+
+      echo "=== Decoding secrets ==="
+      JWT_SECRET_DECODED=$(echo '${jwt_secret_b64}' | base64 -d)
+      DB_PASSWORD_DECODED=$(echo '${db_password_b64}' | base64 -d)
+      DEFAULT_USER_DECODED=$(echo '${default_user_b64}' | base64 -d)
+      DEFAULT_PASSWORD_DECODED=$(echo '${default_password_b64}' | base64 -d)
+      ENCRYPTION_KEY_DECODED=$(echo '${encryption_key_b64}' | base64 -d)
+
+      sed -i "s#JWT_SECRET_PLACEHOLDER#$JWT_SECRET_DECODED#g" /opt/messenger/docker-compose.yml
+      sed -i "s#DB_PASSWORD_PLACEHOLDER#$DB_PASSWORD_DECODED#g" /opt/messenger/docker-compose.yml
+      sed -i "s#DEFAULT_USER_PLACEHOLDER#$DEFAULT_USER_DECODED#g" /opt/messenger/docker-compose.yml
+      sed -i "s#DEFAULT_PASSWORD_PLACEHOLDER#$DEFAULT_PASSWORD_DECODED#g" /opt/messenger/docker-compose.yml
+      sed -i "s#ENCRYPTION_KEY_PLACEHOLDER#$ENCRYPTION_KEY_DECODED#g" /opt/messenger/docker-compose.yml
+
+      echo "=== Starting PostgreSQL container ==="
+      cd /opt/messenger
+      docker compose up -d postgres
+
+      echo "=== Waiting for PostgreSQL to be ready ==="
+      for i in $(seq 1 30); do
+        if docker exec postgres pg_isready -U ${db_user} -d ${db_name}; then
+          echo "PostgreSQL is ready!"
+          break
+        fi
+        echo "Waiting for PostgreSQL... ($i/30)"
+        sleep 2
+      done
+
+      echo "=== Starting migration from Managed PostgreSQL ==="
+      SOURCE_HOST="${source_db_host}"
+      SOURCE_PORT="${source_db_port}"
+
+      echo "Source: $SOURCE_HOST:$SOURCE_PORT"
+      echo "Target: localhost:5432"
+
+      PGPASSWORD="${db_password}" pg_dump -h $SOURCE_HOST -p $SOURCE_PORT -U ${db_user} ${db_name} | docker exec -i postgres psql -U ${db_user} -d ${db_name}
+
+      echo "=== Migration completed ==="
+
+      echo "=== Starting all services ==="
+      docker compose up -d
+
+      echo "=== Waiting for services ==="
+      sleep 10
+      docker compose ps
+
+      echo "=== Caddy logs (SSL certificate acquisition) ==="
+      docker logs caddy 2>&1 | tail -20
+
+      echo "=== Migration VM ready at $(date) ==="
+      echo "HTTPS: https://${domain}"
+    owner: root:root
+    permissions: '0755'
+
+runcmd:
+  - [ apt-get, update ]
+  - [ apt-get, install, -y, docker.io, docker-compose-plugin, postgresql-client, curl ]
+  - [ systemctl, start,docker ]
+  - [ systemctl, enable, docker ]
+  - [ sh, -c, "sleep 5" ]
+  - [ mkdir, -p, /opt/messenger ]
+  - [ chmod, "755", /opt/messenger/start.sh ]
+  - [ sh, -c, "/opt/messenger/start.sh" ]

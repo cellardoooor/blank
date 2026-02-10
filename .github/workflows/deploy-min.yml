@@ -1,0 +1,74 @@
+name: Deploy Min (Migration)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  TF_ROOT: terraform/envs/min
+  DOCKER_IMAGE: cellardooor/blank:latest
+
+jobs:
+  deploy-min:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[dev]') }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          terraform init \
+            -backend-config="endpoints={s3=\"https://storage.yandexcloud.net\"}" \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="region=ru-central1" \
+            -backend-config="key=dev/terraform.tfstate" \
+            -backend-config="access_key=${{ secrets.YC_S3_ACCESS_KEY }}" \
+            -backend-config="secret_key=${{ secrets.YC_S3_SECRET_KEY }}" \
+            -backend-config="skip_region_validation=true" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="skip_requesting_account_id=true"
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_ROOT }}
+        env:
+          TF_VAR_yc_token: ${{ secrets.YC_TOKEN }}
+          TF_VAR_yc_cloud_id: ${{ vars.YC_CLOUD_ID }}
+          TF_VAR_yc_folder_id: ${{ vars.YC_FOLDER_ID }}
+          TF_VAR_docker_image: ${{ env.DOCKER_IMAGE }}
+          TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          TF_VAR_encryption_key: ${{ secrets.ENCRYPTION_KEY }}
+          TF_VAR_jwt_duration: ${{ vars.JWT_DURATION }}
+          TF_VAR_db_user: ${{ vars.DB_USER }}
+          TF_VAR_db_name: ${{ vars.DB_NAME }}
+          TF_VAR_default_user: ${{ secrets.DEFAULT_USER }}
+          TF_VAR_default_password: ${{ secrets.DEFAULT_PASSWORD }}
+          TF_VAR_domain: ${{ vars.DOMAIN }}
+        run: |
+          terraform apply -auto-approve -input=false
+
+      - name: Deployment Summary
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          echo "========================================="
+          echo "Min Deployment Complete!"
+          echo "========================================="
+          echo ""
+          echo "VM IP: $(terraform output -raw vm_ip)"
+          echo "Domain: https://$(terraform output -raw domain)"
+          echo "Source DB (Managed): $(terraform output -raw source_db_host)"
+          echo "Docker Image: ${{ env.DOCKER_IMAGE }}"
+          echo ""
+          echo "Migration runs automatically on VM startup"
+          echo "Check logs: yc compute connect-to-serial-port <vm-id>"
+          echo "========================================="
