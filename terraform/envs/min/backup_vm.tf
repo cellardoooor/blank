@@ -36,8 +36,9 @@ resource "yandex_compute_instance" "backup_vm" {
   }
 
   network_interface {
-    subnet_id = module.network.app_subnet_id
-    nat       = true
+    subnet_id          = module.network.app_subnet_id
+    nat                = true
+    security_group_ids = [module.network.app_security_group_id]
   }
 
   # Metadata для cloud-init

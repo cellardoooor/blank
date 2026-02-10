@@ -16,7 +16,7 @@ write_files:
       DB_USER="${db_user}"
       DB_PASS="${db_password}"
       DB_SOURCE_HOST="${db_host}"
-      DB_SOURCE_PORT="6432"
+      DB_SOURCE_PORT="5432"
       
       # Переменные для локальной БД
       PGDATA="/mnt/data/pgdata"
