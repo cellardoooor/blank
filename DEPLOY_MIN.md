@@ -181,15 +181,15 @@ terraform apply
 terraform/
 ├── envs/
 │   ├── min/                 # Min deployment (production)
-│   │   ├── main.tf         # Single VM + PostgreSQL + Caddy
+│   │   ├── main.tf         # VPC + Subnet + Single VM + PostgreSQL + Caddy
 │   │   ├── variables.tf    # Переменные
 │   │   ├── outputs.tf      # Выходные значения
 │   │   ├── backend.tf      # S3 backend
 │   │   ├── providers.tf    # Провайдеры
 │   │   ├── cloud_init_min.yaml  # Cloud-init конфигурация
 │   │   └── terraform.tfvars.example
-│   └── dev/                 # Dev deployment [dev]
-└── network/                 # VPC и subnet (общий модуль)
+│   └── dev/                 # Dev deployment [dev] (uses network module)
+└── network/                 # Network module (for Dev only: NAT, ALB, DB subnets)
 ```
 
 ## Переменные окружения приложения

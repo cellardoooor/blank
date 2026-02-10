@@ -93,16 +93,23 @@ Production-ready messenger backend with WebSocket support, JWT authentication, a
 │   │   ├── 001_init.sql           # Database schema
 │   │   └── 002_username_case_insensitive.sql  # Case-insensitive username index
 │   │   └── embed.go               # embed.FS for embedding migrations
-├── terraform/                  # Infrastructure (ALB, Instance Group, Managed PostgreSQL)
-│   ├── network/               # VPC with 3 subnets (public, app, db)
-│   ├── alb/                   # Application Load Balancer with HTTPS
-│   ├── compute/               # Instance Group with auto-scaling
-│   ├── database/              # Yandex Managed PostgreSQL
-│   └── envs/dev/              # Environment configuration
+├── terraform/                  # Infrastructure as Code
+│   ├── envs/
+│   │   ├── min/                # Min deployment (single VM + PostgreSQL + Caddy)
+│   │   │   ├── main.tf         # VPC, subnet, VM, security group
+│   │   │   ├── variables.tf
+│   │   │   ├── outputs.tf
+│   │   │   └── cloud_init_min.yaml
+│   │   └── dev/                # Dev deployment [dev] (ALB + Instance Group + Managed PostgreSQL)
+│   ├── network/                # Network module (for Dev only)
+│   ├── alb/                    # Application Load Balancer with HTTPS
+│   ├── compute/                # Instance Group with auto-scaling
+│   └── database/               # Yandex Managed PostgreSQL
 ├── docker-compose.yml         # Local development (with local PostgreSQL)
 ├── Dockerfile                 # Application image (Go app only, no PostgreSQL)
 └── .github/workflows/         # CI/CD
-    └── deploy.yml
+    ├── deploy-min.yml         # Min deployment (default)
+    └── deploy.yml             # Dev deployment [dev]
 ```
 
 ## 4. Data Models
@@ -795,12 +802,15 @@ Internet
 ```
 
 **Min Components:**
+- **VPC**: Single network (10.0.0.0/16), created directly in min/main.tf
+- **Subnet**: Single subnet (10.0.2.0/24), no NAT Gateway
 - **VM**: Ubuntu 22.04, 2 vCPU, 2GB RAM, 10GB boot disk
 - **Data Disk**: 20GB HDD for PostgreSQL data and Caddy certs
 - **Caddy**: Automatic HTTPS with Let's Encrypt
 - **App**: Go application in Docker
 - **PostgreSQL**: Database in Docker container
 - **Security Group**: Allows 22 (SSH), 80 (HTTP), 443 (HTTPS)
+- **Static IP**: Preserved across VM recreations
 
 ### 10.3 Dev Architecture (Scalable) [dev]
 
@@ -1396,7 +1406,8 @@ When modifying this project, maintain:
   - `DEPLOY_MIN.md` - Min deployment documentation
 - **Infrastructure**:
   - Min: Ubuntu VM + Caddy (auto HTTPS) + PostgreSQL container + Data disk
-  - Dev: Unchanged, triggered by `[dev]` in commit message
+  - Min: Network (VPC + subnet) created directly in min/main.tf, no network module
+  - Dev: Unchanged, triggered by `[dev]` in commit message, uses network module
 - **Documentation**:
   - README.md: Added deployment options table and dual architecture diagrams
   - TECHNICAL_SPEC.md: Added Section 10.1-10.2 for Min architecture
