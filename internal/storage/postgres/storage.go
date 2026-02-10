@@ -175,13 +175,13 @@ func (r *MessageRepo) GetByUserPairWithReadStatus(ctx context.Context, currentUs
 	sql := `
 		SELECT m.id, m.sender_id, m.receiver_id, m.payload, m.created_at,
 			CASE 
-				WHEN m.sender_id = $1 THEN 
+				WHEN m.sender_id = $2 THEN 
 					COALESCE(cr.last_read_at >= m.created_at, false)
 				ELSE false
 			END as is_read
 		FROM messages m
-		LEFT JOIN chat_reads cr ON cr.user_id = $2 AND cr.partner_id = $1
-		WHERE (m.sender_id = $1 AND m.receiver_id = $2) OR (m.sender_id = $2 AND m.receiver_id = $1)
+		LEFT JOIN chat_reads cr ON cr.user_id = m.receiver_id AND cr.partner_id = m.sender_id
+		WHERE (m.sender_id = $2 AND m.receiver_id = $1) OR (m.sender_id = $1 AND m.receiver_id = $2)
 		ORDER BY m.created_at DESC LIMIT $3 OFFSET $4`
 	rows, err := conn.Query(ctx, sql, partnerID, currentUser, limit, offset)
 	if err != nil {
