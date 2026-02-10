@@ -61,14 +61,9 @@ write_files:
             - "443:443"
           volumes:
             - /opt/messenger/Caddyfile:/etc/caddy/Caddyfile:ro
-            - caddy_data:/data
-            - caddy_config:/config
+            - /mnt/data/caddy:/data
           depends_on:
             - app
-
-      volumes:
-        caddy_data:
-        caddy_config:
 
     owner: root:root
     permissions: '0644'
@@ -95,17 +90,15 @@ write_files:
         exit 1
       fi
 
-      echo "=== Formatting and mounting data disk ==="
-      if ! blkid "$DISK"; then
-        mkfs.ext4 -F "$DISK"
-      fi
-
+      echo "=== Mounting data disk ==="
       mkdir -p /mnt/data
       mount "$DISK" /mnt/data
       echo "$DISK /mnt/data ext4 defaults 0 0" >> /etc/fstab
 
       mkdir -p /mnt/data/postgres
       chown -R 999:999 /mnt/data/postgres
+
+      mkdir -p /mnt/data/caddy
 
       echo "=== Decoding secrets ==="
       JWT_SECRET_DECODED=$(echo '${jwt_secret_b64}' | base64 -d)
@@ -134,16 +127,21 @@ write_files:
         sleep 2
       done
 
-      echo "=== Starting migration from Managed PostgreSQL ==="
-      SOURCE_HOST="${source_db_host}"
-      SOURCE_PORT="${source_db_port}"
+      if [ ! -f /mnt/data/.migrated ]; then
+        echo "=== Starting migration from Managed PostgreSQL ==="
+        SOURCE_HOST="${source_db_host}"
+        SOURCE_PORT="${source_db_port}"
 
-      echo "Source: $SOURCE_HOST:$SOURCE_PORT"
-      echo "Target: localhost:5432"
+        echo "Source: $SOURCE_HOST:$SOURCE_PORT"
+        echo "Target: localhost:5432"
 
-      PGPASSWORD="${db_password}" pg_dump -h $SOURCE_HOST -p $SOURCE_PORT -U ${db_user} ${db_name} | docker exec -i postgres psql -U ${db_user} -d ${db_name}
+        PGPASSWORD="${db_password}" pg_dump -h $SOURCE_HOST -p $SOURCE_PORT -U ${db_user} ${db_name} | docker exec -i postgres psql -U ${db_user} -d ${db_name}
 
-      echo "=== Migration completed ==="
+        touch /mnt/data/.migrated
+        echo "=== Migration completed ==="
+      else
+        echo "=== Migration already done, skipping ==="
+      fi
 
       echo "=== Starting all services ==="
       docker compose up -d
@@ -152,7 +150,7 @@ write_files:
       sleep 10
       docker compose ps
 
-      echo "=== Caddy logs (SSL certificate acquisition) ==="
+      echo "=== Caddy logs (SSL certificate) ==="
       docker logs caddy 2>&1 | tail -20
 
       echo "=== Migration VM ready at $(date) ==="
