@@ -98,6 +98,7 @@ locals {
     jwt_secret_b64       = base64encode(var.jwt_secret)
     jwt_duration         = var.jwt_duration
     db_user              = var.db_user
+    db_password          = var.db_password
     db_password_b64      = base64encode(var.db_password)
     db_name              = var.db_name
     default_user_b64     = base64encode(var.default_user)
