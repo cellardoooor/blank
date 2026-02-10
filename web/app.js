@@ -471,7 +471,11 @@ async function loadMessages(chatUserId) {
         
         messages.reverse().forEach(msg => {
             const isOutgoing = msg.sender_id === userId;
-            displayMessage(msg, '', isOutgoing ? 'delivered' : 'delivered');
+            if (isOutgoing) {
+                displayMessage(msg, '', 'delivered');
+            } else {
+                displayMessage(msg, '', '');
+            }
         });
         
     } catch (e) {
