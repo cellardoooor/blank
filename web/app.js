@@ -140,8 +140,7 @@ async function register() {
 }
 
 function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userId');
+    localStorage.clear();
     token = null;
     userId = null;
     currentUser = null;
@@ -385,7 +384,7 @@ function renderChatList() {
     });
 }
 
-function selectChat(chatUserId) {
+async function selectChat(chatUserId) {
     currentChat = chatUserId;
     const chat = chats.get(chatUserId);
     
@@ -403,7 +402,7 @@ function selectChat(chatUserId) {
     renderChatList();
     
     // Load messages
-    loadMessages(chatUserId);
+    await loadMessages(chatUserId);
     
     // Focus input
     document.getElementById('message-input').focus();
@@ -426,11 +425,11 @@ async function loadMessages(chatUserId) {
         
         messages.reverse().forEach(msg => displayMessage(msg));
         
-        scrollToBottom();
-        
     } catch (e) {
         console.error('Failed to load messages:', e);
     }
+    
+    scrollToBottom();
 }
 
 function displayMessage(msg, isOptimistic = false) {
@@ -602,7 +601,7 @@ async function createChatByUsername() {
     }
 }
 
-function startNewChat(userId, username) {
+async function startNewChat(userId, username) {
     // Check if chat already exists
     if (conversationPartners.has(userId)) {
         document.getElementById('new-chat-error').textContent = 
@@ -611,7 +610,7 @@ function startNewChat(userId, username) {
         // Highlight existing chat
         const chat = chats.get(userId);
         if (chat) {
-            selectChat(userId);
+            await selectChat(userId);
         }
         
         closeNewChatModal();
@@ -631,7 +630,7 @@ function startNewChat(userId, username) {
     closeNewChatModal();
     
     // Select the new chat
-    selectChat(userId);
+    await selectChat(userId);
     
     // Re-render chat list
     renderChatList();
