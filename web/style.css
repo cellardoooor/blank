@@ -38,11 +38,13 @@ body {
     font-family: var(--font-family);
     background: var(--white);
     color: var(--black);
+    height: 100vh;
     height: 100dvh;
     overflow: hidden;
 }
 
 #app {
+    height: 100vh;
     height: 100dvh;
     display: flex;
     flex-direction: column;
@@ -85,6 +87,7 @@ input::placeholder, textarea::placeholder {
     display: flex;
     align-items: center;
     justify-content: center;
+    height: 100vh;
     height: 100dvh;
 }
 
@@ -154,6 +157,7 @@ input::placeholder, textarea::placeholder {
 
 #chat-section {
     display: flex;
+    height: 100vh;
     height: 100dvh;
 }
 
@@ -161,6 +165,7 @@ input::placeholder, textarea::placeholder {
 
 #sidebar {
     width: 320px;
+    height: 100vh;
     height: 100dvh;
     border-right: 1px solid var(--gray-300);
     display: flex;
@@ -200,6 +205,7 @@ input::placeholder, textarea::placeholder {
     flex: 1;
     overflow-y: auto;
     min-height: 0;
+    -webkit-overflow-scrolling: touch;
 }
 
 .chat-item {
@@ -318,6 +324,7 @@ input::placeholder, textarea::placeholder {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    height: 100vh;
     height: 100dvh;
 }
 
@@ -368,6 +375,7 @@ input::placeholder, textarea::placeholder {
     overflow-y: auto;
     padding: 20px;
     min-height: 0;
+    -webkit-overflow-scrolling: touch;
 }
 
 #messages {
@@ -591,11 +599,13 @@ input::placeholder, textarea::placeholder {
 @media (max-width: 600px) {
     #chat-section {
         position: relative;
+        height: 100vh;
         height: 100dvh;
     }
     
     #sidebar {
         width: 100%;
+        height: 100vh;
         height: 100dvh;
         border-right: none;
     }
@@ -610,7 +620,7 @@ input::placeholder, textarea::placeholder {
         left: 0;
         right: 0;
         bottom: 0;
-        width: 100%;
+        height: 100vh;
         height: 100dvh;
         display: none;
         flex-direction: column;
@@ -652,6 +662,15 @@ input::placeholder, textarea::placeholder {
     #change-pwd-btn, #logout-btn {
         flex: 1;
     }
+    
+    #input-area {
+        padding-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+    
+    #messages-container {
+        -webkit-overflow-scrolling: touch;
+    }
+}
     
     .modal {
         align-items: flex-start;

@@ -1273,11 +1273,45 @@ When modifying this project, maintain:
 
 ---
 
-**Version**: 2.5
+**Version**: 2.6
 **Last Updated**: 2026-02-10
 **Maintainer**: AI Assistant
 
 ## Changelog
+
+### Version 2.6 (2026-02-10) - API is_read & Mobile UI
+- **API Enhancement**:
+  - `GET /api/messages/{user_id}` now returns `is_read` boolean field for each message
+  - `is_read: true` when recipient has opened the chat after message was sent
+  - SQL JOIN with `chat_reads` table to determine read status
+- **New Backend Components**:
+  - `model.MessageWithRead` struct with `IsRead` field
+  - `storage.GetByUserPairWithReadStatus()` method
+  - `service.GetHistoryWithReadStatus()` method
+- **Mobile UI (≤600px)**:
+  - Full-screen sidebar/chat modes (no split view)
+  - Back button "←" in chat header for navigation
+  - Swipe right (>100px) returns to sidebar
+  - Modals positioned higher (10vh from top, max 70dvh height)
+  - Fixed positioning for chat window
+- **CSS Optimization**:
+  - CSS variables in `:root` for colors, fonts, spacing
+  - `--header-height: 56px`, `--footer-height: 56px` for consistency
+  - `dvh` units instead of `vh` for mobile viewport handling
+  - Removed duplicate styles, unified button styling
+- **Bug Fixes**:
+  - Read status now correctly targets specific chat messages via `data-receiver-id`
+  - SQL JOIN fixed to check `cr.user_id = m.receiver_id` for outgoing messages
+  - Incoming messages now display in black (not gray)
+- **Updated Files**:
+  - `internal/model/user.go` - `MessageWithRead` struct
+  - `internal/storage/interfaces.go` - new interface method
+  - `internal/storage/postgres/storage.go` - SQL with JOIN
+  - `internal/service/message.go` - `GetHistoryWithReadStatus`
+  - `internal/http/handler.go` - `is_read` in API response
+  - `web/app.js` - mobile navigation, read status fix, `data-receiver-id`
+  - `web/style.css` - CSS variables, mobile layout, modal positioning
+  - `web/index.html` - back button in chat header
 
 ### Version 2.5 (2026-02-10) - Unread Messages & Message Status
 - **Unread Messages**:
