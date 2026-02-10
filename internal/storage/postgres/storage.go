@@ -242,3 +242,43 @@ func (r *MessageRepo) GetChatList(ctx context.Context, userID uuid.UUID) ([]stor
 	}
 	return chats, rows.Err()
 }
+
+func (r *MessageRepo) MarkAsRead(ctx context.Context, userID, partnerID uuid.UUID) error {
+	conn := getConn(ctx, r.pool)
+	sql := `
+		INSERT INTO chat_reads (user_id, partner_id, last_read_at) 
+		VALUES ($1, $2, NOW()) 
+		ON CONFLICT (user_id, partner_id) 
+		DO UPDATE SET last_read_at = NOW()`
+	_, err := conn.Exec(ctx, sql, userID, partnerID)
+	return err
+}
+
+func (r *MessageRepo) GetUnreadCounts(ctx context.Context, userID uuid.UUID) (map[uuid.UUID]int, error) {
+	conn := getConn(ctx, r.pool)
+	sql := `
+		SELECT m.sender_id, COUNT(*) 
+		FROM messages m
+		LEFT JOIN chat_reads cr ON cr.user_id = $1 AND cr.partner_id = m.sender_id
+		WHERE m.receiver_id = $1 
+		  AND m.sender_id != $1
+		  AND (cr.last_read_at IS NULL OR m.created_at > cr.last_read_at)
+		GROUP BY m.sender_id`
+
+	rows, err := conn.Query(ctx, sql, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make(map[uuid.UUID]int)
+	for rows.Next() {
+		var senderID uuid.UUID
+		var count int
+		if err := rows.Scan(&senderID, &count); err != nil {
+			return nil, err
+		}
+		counts[senderID] = count
+	}
+	return counts, rows.Err()
+}

@@ -19,6 +19,7 @@ let chats = new Map(); // userId -> chat data
 let allUsers = [];
 let conversationPartners = new Set();
 let messagesMap = new Map(); // userId -> messages array
+let messageStatus = new Map(); // messageId -> 'sending' | 'delivered' | 'read'
 
 const API_URL = '/api';
 
@@ -148,6 +149,10 @@ function logout() {
     chats.clear();
     messagesMap.clear();
     
+    document.getElementById('messages').innerHTML = '';
+    document.getElementById('empty-state').style.display = 'flex';
+    document.getElementById('active-chat').style.display = 'none';
+    
     if (ws) {
         ws.close();
         ws = null;
@@ -225,6 +230,11 @@ function initWebSocket() {
 }
 
 function handleIncomingMessage(msg) {
+    if (msg.type === 'read') {
+        handleReadStatus(msg);
+        return;
+    }
+
     const partnerId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
     
     // Add to messages map
@@ -252,12 +262,27 @@ function handleIncomingMessage(msg) {
             const replaced = replaceOptimisticMessage(msg);
             if (!replaced) {
                 // If no optimistic found, display as new
-                displayMessage(msg);
+                displayMessage(msg, '', 'delivered');
             }
         } else {
-            displayMessage(msg);
+            displayMessage(msg, '', 'delivered');
         }
     }
+}
+
+function handleReadStatus(msg) {
+    if (msg.reader_id && msg.partner_id === userId) {
+        markOutgoingAsRead(msg.reader_id);
+    }
+}
+
+function markOutgoingAsRead(partnerId) {
+    const container = document.getElementById('messages');
+    const outgoingMessages = container.querySelectorAll('.message.outgoing');
+    outgoingMessages.forEach(msgDiv => {
+        msgDiv.classList.remove('sending', 'delivered');
+        msgDiv.classList.add('read');
+    });
 }
 
 // ==================== CHAT LIST ====================
@@ -285,7 +310,8 @@ async function loadChats() {
                 userId: chat.user_id,
                 username: chat.username || chat.user_id,
                 lastMessage: chat.last_message,
-                lastMessageTime: new Date(chat.last_message_time)
+                lastMessageTime: new Date(chat.last_message_time),
+                unreadCount: chat.unread_count || 0
             });
             conversationPartners.add(chat.user_id);
         });
@@ -370,13 +396,20 @@ function renderChatList() {
         const timeStr = formatChatListTime(chat.lastMessageTime);
         const preview = chat.lastMessage ? truncateText(chat.lastMessage, 30) : 'No messages yet';
         
+        const unreadBadge = chat.unreadCount > 0 
+            ? `<div class="unread-badge">${chat.unreadCount}</div>` 
+            : '';
+        
         div.innerHTML = `
             <div class="chat-content">
                 <div class="chat-header-row">
                     <div class="chat-username">${escapeHtml(chat.username)}</div>
                     <div class="chat-time">${timeStr}</div>
                 </div>
-                <div class="chat-preview">${escapeHtml(preview)}</div>
+                <div class="chat-preview-row">
+                    <div class="chat-preview">${escapeHtml(preview)}</div>
+                    ${unreadBadge}
+                </div>
             </div>
         `;
         
@@ -398,14 +431,27 @@ async function selectChat(chatUserId) {
     document.getElementById('chat-username').textContent = chat.username;
     document.getElementById('chat-status').textContent = '';
     
-    // Update sidebar selection
+    // Clear unread count and re-render sidebar
+    chat.unreadCount = 0;
     renderChatList();
     
     // Load messages
     await loadMessages(chatUserId);
     
+    // Send read status via WebSocket
+    sendReadStatus(chatUserId);
+    
     // Focus input
     document.getElementById('message-input').focus();
+}
+
+function sendReadStatus(partnerId) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            type: 'read',
+            partner_id: partnerId
+        }));
+    }
 }
 
 async function loadMessages(chatUserId) {
@@ -423,7 +469,10 @@ async function loadMessages(chatUserId) {
         
         messagesMap.set(chatUserId, messages);
         
-        messages.reverse().forEach(msg => displayMessage(msg));
+        messages.reverse().forEach(msg => {
+            const isOutgoing = msg.sender_id === userId;
+            displayMessage(msg, '', isOutgoing ? 'delivered' : 'delivered');
+        });
         
     } catch (e) {
         console.error('Failed to load messages:', e);
@@ -432,12 +481,14 @@ async function loadMessages(chatUserId) {
     scrollToBottom();
 }
 
-function displayMessage(msg, isOptimistic = false) {
+function displayMessage(msg, status = '', forcedStatus = '') {
     const container = document.getElementById('messages');
     const isOutgoing = msg.sender_id === userId;
     
+    const actualStatus = forcedStatus || (status || (isOutgoing ? 'sending' : 'delivered'));
+    
     const div = document.createElement('div');
-    div.className = `message ${isOutgoing ? 'outgoing' : 'incoming'} ${isOptimistic ? 'optimistic' : ''}`;
+    div.className = `message ${isOutgoing ? 'outgoing' : 'incoming'} ${actualStatus}`;
     div.dataset.messageId = msg.id;
     
     const text = decodePayload(msg.payload);
@@ -457,12 +508,13 @@ function replaceOptimisticMessage(serverMsg) {
     const text = decodePayload(serverMsg.payload);
     
     // Find optimistic message by content (sent by current user)
-    const optimisticMsgs = container.querySelectorAll('.message.optimistic');
-    for (const msgDiv of optimisticMsgs) {
+    const sendingMsgs = container.querySelectorAll('.message.sending');
+    for (const msgDiv of sendingMsgs) {
         const msgText = msgDiv.querySelector('.message-text').textContent;
         if (msgText === text && serverMsg.sender_id === userId) {
-            // Replace with confirmed message
-            msgDiv.classList.remove('optimistic');
+            // Replace with confirmed message (delivered status)
+            msgDiv.classList.remove('sending');
+            msgDiv.classList.add('delivered');
             msgDiv.dataset.messageId = serverMsg.id;
             return true;
         }
@@ -545,7 +597,7 @@ function sendMessage() {
     input.value = '';
     input.style.height = 'auto';
     
-    // Optimistically add to UI (will be replaced by server response)
+    // Optimistically add to UI with sending status
     const optimisticMsg = {
         id: 'temp-' + Date.now(),
         sender_id: userId,
@@ -554,7 +606,7 @@ function sendMessage() {
         created_at: new Date().toISOString()
     };
     
-    displayMessage(optimisticMsg, true);
+    displayMessage(optimisticMsg, 'sending');
     
     // Update chat list
     updateChatFromMessage(currentChat, optimisticMsg);

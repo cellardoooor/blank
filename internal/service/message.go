@@ -103,6 +103,7 @@ type ChatWithUser struct {
 	Username        string    `json:"username"`
 	LastMessage     string    `json:"last_message"`
 	LastMessageTime time.Time `json:"last_message_time"`
+	UnreadCount     int       `json:"unread_count"`
 }
 
 func (s *MessageService) GetChatList(ctx context.Context, userID uuid.UUID) ([]ChatWithUser, error) {
@@ -111,6 +112,11 @@ func (s *MessageService) GetChatList(ctx context.Context, userID uuid.UUID) ([]C
 	}
 
 	chats, err := s.repo.GetChatList(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	unreadCounts, err := s.repo.GetUnreadCounts(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -137,13 +143,23 @@ func (s *MessageService) GetChatList(ctx context.Context, userID uuid.UUID) ([]C
 			}
 		}
 
+		unreadCount := unreadCounts[chat.PartnerID]
+
 		result = append(result, ChatWithUser{
 			UserID:          user.ID.String(),
 			Username:        user.Username,
 			LastMessage:     lastMsgText,
 			LastMessageTime: chat.LastMessage.CreatedAt,
+			UnreadCount:     unreadCount,
 		})
 	}
 
 	return result, nil
+}
+
+func (s *MessageService) MarkChatAsRead(ctx context.Context, userID, partnerID uuid.UUID) error {
+	if s.repo == nil {
+		return fmt.Errorf("database unavailable")
+	}
+	return s.repo.MarkAsRead(ctx, userID, partnerID)
 }

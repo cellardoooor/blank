@@ -1273,11 +1273,32 @@ When modifying this project, maintain:
 
 ---
 
-**Version**: 2.4
-**Last Updated**: 2026-02-09
+**Version**: 2.5
+**Last Updated**: 2026-02-10
 **Maintainer**: AI Assistant
 
 ## Changelog
+
+### Version 2.5 (2026-02-10) - Unread Messages & Message Status
+- **Unread Messages**:
+  - **Database**: New `chat_reads` table for tracking last read timestamp
+  - **API**: `GET /api/chats` now returns `unread_count` for each chat
+  - **Frontend**: Badge with unread count displayed in chat list (top-right of chat item)
+  - **WebSocket**: New message type `{"type": "read", "partner_id": "..."}` to mark chat as read
+- **Message Status (3 states)**:
+  - **Sending**: Light gray text (opacity 0.4) - message being sent
+  - **Delivered**: Gray text (#999999) - message confirmed by server
+  - **Read**: Black text (#000000) - message read by recipient
+- **New Files**:
+  - `internal/migrations/003_chat_reads.sql` - chat_reads table migration
+- **Updated Files**:
+  - `internal/storage/interfaces.go` - MarkAsRead, GetUnreadCounts methods
+  - `internal/storage/postgres/storage.go` - implementation
+  - `internal/service/message.go` - MarkChatAsRead, UnreadCount in response
+  - `internal/ws/hub.go` - ReadStatus message type
+  - `internal/ws/handler.go` - handle read status messages
+  - `web/app.js` - unread badges, message status handling
+  - `web/style.css` - styles for .sending, .delivered, .read, .unread-badge
 
 ### Version 2.4 (2026-02-09) - Username Validation & Avatar Removal
 - **Username Validation**: Usernames must contain only latin letters and digits (a-z, A-Z, 0-9)

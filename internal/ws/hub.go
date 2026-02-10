@@ -10,6 +10,7 @@ import (
 type Hub struct {
 	clients    map[uuid.UUID]*Client
 	broadcast  chan Message
+	readStatus chan ReadStatus
 	register   chan *Client
 	unregister chan *Client
 	mu         sync.RWMutex
@@ -23,10 +24,17 @@ type Message struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+type ReadStatus struct {
+	Type      string    `json:"type"`
+	ReaderID  uuid.UUID `json:"reader_id"`
+	PartnerID uuid.UUID `json:"partner_id"`
+}
+
 func NewHub() *Hub {
 	return &Hub{
 		clients:    make(map[uuid.UUID]*Client),
 		broadcast:  make(chan Message, 256),
+		readStatus: make(chan ReadStatus, 256),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 	}
@@ -77,6 +85,18 @@ func (h *Hub) Run() {
 					h.mu.Unlock()
 				}
 			}
+
+		case status := <-h.readStatus:
+			h.mu.RLock()
+			partner, ok := h.clients[status.PartnerID]
+			h.mu.RUnlock()
+
+			if ok {
+				select {
+				case partner.sendReadStatus <- status:
+				default:
+				}
+			}
 		}
 	}
 }
@@ -84,6 +104,13 @@ func (h *Hub) Run() {
 func (h *Hub) Broadcast(msg Message) {
 	select {
 	case h.broadcast <- msg:
+	case <-time.After(time.Second):
+	}
+}
+
+func (h *Hub) SendReadStatus(status ReadStatus) {
+	select {
+	case h.readStatus <- status:
 	case <-time.After(time.Second):
 	}
 }

@@ -20,11 +20,14 @@ type MessageRepository interface {
 	GetByUserPair(ctx context.Context, user1, user2 uuid.UUID, limit, offset int) ([]model.Message, error)
 	GetConversationPartners(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 	GetChatList(ctx context.Context, userID uuid.UUID) ([]ChatInfo, error)
+	MarkAsRead(ctx context.Context, userID, partnerID uuid.UUID) error
+	GetUnreadCounts(ctx context.Context, userID uuid.UUID) (map[uuid.UUID]int, error)
 }
 
 type ChatInfo struct {
 	PartnerID   uuid.UUID
 	LastMessage *model.Message
+	UnreadCount int
 }
 
 type TransactionManager interface {

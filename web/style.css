@@ -265,6 +265,25 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex: 1;
+}
+
+.chat-preview-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.unread-badge {
+    background: #000000;
+    color: #ffffff;
+    border-radius: 10px;
+    padding: 2px 6px;
+    font-size: 12px;
+    min-width: 18px;
+    text-align: center;
+    flex-shrink: 0;
+    margin-left: 8px;
 }
 
 #sidebar-footer {
@@ -372,6 +391,8 @@ body {
 #messages {
     display: flex;
     flex-direction: column;
+    justify-content: flex-end;
+    min-height: 100%;
 }
 
 .message {
@@ -417,12 +438,17 @@ body {
 }
 
 /* Optimistic (sending) messages - gray text on white background */
-.message.optimistic .message-text {
+.message.sending .message-text {
+    color: #000000;
+    opacity: 0.4;
+}
+
+.message.delivered .message-text {
     color: #999999;
 }
 
-.message.optimistic {
-    background: #ffffff !important;
+.message.read .message-text {
+    color: #000000;
 }
 
 #input-area {
@@ -635,6 +661,11 @@ body {
     
     #chat-window {
         height: 60vh;
+    }
+    
+    #new-chat-btn {
+        padding: 6px 10px;
+        font-size: 12px;
     }
 }
 

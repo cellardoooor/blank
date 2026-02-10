@@ -25,6 +25,7 @@ type Client struct {
 	hub            *Hub
 	conn           *websocket.Conn
 	send           chan Message
+	sendReadStatus chan ReadStatus
 	userID         uuid.UUID
 	messageService *service.MessageService
 }
@@ -65,6 +66,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hub:            h.hub,
 		conn:           conn,
 		send:           make(chan Message, 256),
+		sendReadStatus: make(chan ReadStatus, 256),
 		userID:         userID,
 		messageService: h.messageService,
 	}
@@ -95,6 +97,37 @@ func (c *Client) readPump() {
 				log.Printf("websocket error: %v", err)
 			}
 			break
+		}
+
+		var rawMsg map[string]interface{}
+		if err := json.Unmarshal(data, &rawMsg); err != nil {
+			log.Printf("failed to unmarshal message: %v", err)
+			continue
+		}
+
+		if msgType, ok := rawMsg["type"].(string); ok && msgType == "read" {
+			partnerIDStr, ok := rawMsg["partner_id"].(string)
+			if !ok {
+				continue
+			}
+			partnerID, err := uuid.Parse(partnerIDStr)
+			if err != nil {
+				continue
+			}
+
+			if c.messageService != nil {
+				ctx := context.Background()
+				if err := c.messageService.MarkChatAsRead(ctx, c.userID, partnerID); err != nil {
+					log.Printf("failed to mark as read: %v", err)
+				}
+			}
+
+			c.hub.SendReadStatus(ReadStatus{
+				Type:      "read",
+				ReaderID:  c.userID,
+				PartnerID: partnerID,
+			})
+			continue
 		}
 
 		var msg Message
@@ -152,6 +185,18 @@ func (c *Client) writePump() {
 			}
 
 			data, err := json.Marshal(apiMsg)
+			if err != nil {
+				continue
+			}
+
+			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+
+		case status := <-c.sendReadStatus:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+			data, err := json.Marshal(status)
 			if err != nil {
 				continue
 			}
