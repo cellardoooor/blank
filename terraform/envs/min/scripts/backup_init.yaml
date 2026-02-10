@@ -1,0 +1,71 @@
+#cloud-config
+
+package_update: true
+packages:
+  - postgresql-15
+  - postgresql-client-15
+
+write_files:
+  - path: /root/migrate.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+      
+      DB_NAME="${db_name}"
+      DB_USER="${db_user}"
+      DB_PASS="${db_password}"
+      DB_SOURCE_HOST="${db_host}"
+      DB_SOURCE_PORT="6432"
+      
+      # Переменные для локальной БД
+      PGDATA="/mnt/data/pgdata"
+      LOCAL_PG_PORT="5432"
+      
+      # 1. Подготовка диска
+      # Предполагаем, что второй диск это /dev/vdb. Если нет, нужно настроить udev rules.
+      DISK="/dev/vdb"
+      if [ ! -b "$DISK" ]; then
+        echo "Secondary disk $DISK not found"
+        exit 1
+      fi
+      
+      # Проверка, отформатирован ли диск
+      if ! blkid "$DISK"; then
+        mkfs.ext4 -F "$DISK"
+      fi
+      
+      mkdir -p /mnt/data
+      mount "$DISK" /mnt/data
+      echo "$DISK /mnt/data ext4 defaults 0 0" >> /etc/fstab
+      
+      # 2. Настройка PostgreSQL на новом диске
+      mkdir -p $PGDATA
+      chown -R postgres:postgres /mnt/data
+      
+      # Инициализация кластера
+      sudo -u postgres /usr/lib/postgresql/15/bin/initdb -D $PGDATA
+      
+      # Обновляем сервис systemd чтобы использовал новый PGDATA
+      echo "[Service]" > /etc/systemd/system/postgresql.service.d/override.conf
+      echo "Environment=PGDATA=$PGDATA" >> /etc/systemd/system/postgresql.service.d/override.conf
+      systemctl daemon-reload
+      
+      # Запуск локального PostgreSQL
+      systemctl start postgresql
+      
+      # 3. Копирование данных
+      # Создаем базу данных
+      sudo -u postgres psql -p $LOCAL_PG_PORT -c "CREATE DATABASE $DB_NAME;"
+      # Создаем пользователя (опционально, если нужен такой же как на источнике)
+      sudo -u postgres psql -p $LOCAL_PG_PORT -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';"
+      sudo -u postgres psql -p $LOCAL_PG_PORT -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
+
+      # Дамп и восстановление
+      echo "Starting migration from $DB_SOURCE_HOST..."
+      PGPASSWORD=$DB_PASS pg_dump -h $DB_SOURCE_HOST -p $DB_SOURCE_PORT -U $DB_USER $DB_NAME | sudo -u postgres psql -p $LOCAL_PG_PORT $DB_NAME
+      
+      echo "Migration completed."
+
+runcmd:
+  - /root/migrate.sh
