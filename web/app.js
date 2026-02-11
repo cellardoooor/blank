@@ -871,6 +871,7 @@ function setupInputResize() {
     });
     
     input.addEventListener('keydown', function(e) {
+        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) return;
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             sendMessage();
