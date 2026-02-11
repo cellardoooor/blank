@@ -31,11 +31,9 @@ const MAX_RECONNECT_DELAY = 30000;
 const PING_INTERVAL = 30000;
 const PONG_TIMEOUT = 10000;
 
-// Favicon blinking for unread messages
-let faviconBlinkInterval = null;
+// Favicon switching for unread messages
 const ORIGINAL_FAVICON = '/favicon.ico';
 const UNREAD_FAVICON = '/unread.ico';
-const FAVICON_BLINK_INTERVAL = 1000;
 
 const API_URL = '/api';
 const DATA_REFRESH_THROTTLE = 30000;
@@ -186,34 +184,24 @@ function updateDocumentTitle() {
     const totalUnread = Array.from(chats.values()).reduce((sum, chat) => sum + (chat.unreadCount || 0), 0);
     document.title = totalUnread > 0 ? `Blank (${totalUnread})` : 'Blank';
     
-    // Stop blinking if no unread messages
-    if (totalUnread === 0) {
-        stopFaviconBlink();
+    // Update favicon based on unread status
+    if (totalUnread > 0) {
+        setUnreadFavicon();
+    } else {
+        setOriginalFavicon();
     }
 }
 
-function startFaviconBlink() {
-    if (faviconBlinkInterval) return;
-    
-    let isUnreadIcon = false;
+function setUnreadFavicon() {
     const link = document.querySelector('link[rel="icon"]') || document.querySelector('link[rel="shortcut icon"]');
-    
-    faviconBlinkInterval = setInterval(() => {
-        isUnreadIcon = !isUnreadIcon;
-        if (link) {
-            link.href = isUnreadIcon ? UNREAD_FAVICON : ORIGINAL_FAVICON;
-        }
-    }, FAVICON_BLINK_INTERVAL);
+    if (link && link.href !== UNREAD_FAVICON) {
+        link.href = UNREAD_FAVICON;
+    }
 }
 
-function stopFaviconBlink() {
-    if (faviconBlinkInterval) {
-        clearInterval(faviconBlinkInterval);
-        faviconBlinkInterval = null;
-    }
-    
+function setOriginalFavicon() {
     const link = document.querySelector('link[rel="icon"]') || document.querySelector('link[rel="shortcut icon"]');
-    if (link) {
+    if (link && link.href !== ORIGINAL_FAVICON) {
         link.href = ORIGINAL_FAVICON;
     }
 }
@@ -360,10 +348,8 @@ function handleIncomingMessage(msg) {
             renderChatList();
             updateDocumentTitle();
             
-            // Start favicon blinking if tab is not focused
-            if (!document.hasFocus()) {
-                startFaviconBlink();
-            }
+            // Set unread favicon
+            setUnreadFavicon();
         }
     }
 }
@@ -555,8 +541,8 @@ async function selectChat(chatUserId) {
     renderChatList();
     updateDocumentTitle();
     
-    // Stop favicon blinking when opening chat with unread messages
-    stopFaviconBlink();
+    // Reset favicon when opening chat with unread messages
+    setOriginalFavicon();
     
     await loadMessages(chatUserId);
     
@@ -1091,8 +1077,8 @@ function setupEventListeners() {
             clearTimeout(refreshDebounceTimer);
             refreshDebounceTimer = setTimeout(refreshAllData, 500);
             
-            // Stop favicon blinking when tab becomes visible
-            stopFaviconBlink();
+            // Reset favicon when tab becomes visible
+            setOriginalFavicon();
         }
     });
     
