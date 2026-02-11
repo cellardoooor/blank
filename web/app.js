@@ -451,6 +451,10 @@ async function selectChat(chatUserId) {
     sendReadStatus(chatUserId);
     
     document.getElementById('message-input').focus();
+    
+    if (window.innerWidth <= 600) {
+        setTimeout(scrollToBottom, 100);
+    }
 }
 
 function goToSidebar() {
@@ -613,7 +617,6 @@ function sendMessage() {
     
     if (!text || !currentChat) return;
     
-    // Send payload as string directly
     const msg = {
         receiver_id: currentChat,
         payload: text
@@ -626,11 +629,9 @@ function sendMessage() {
         return;
     }
     
-    // Clear input and resize
     input.value = '';
     input.style.height = 'auto';
     
-    // Optimistically add to UI with sending status
     const optimisticMsg = {
         id: 'temp-' + Date.now(),
         sender_id: userId,
@@ -641,8 +642,9 @@ function sendMessage() {
     
     displayMessage(optimisticMsg, 'sending');
     
-    // Update chat list
     updateChatFromMessage(currentChat, optimisticMsg);
+    
+    input.focus();
 }
 
 // ==================== NEW CHAT MODAL ====================
