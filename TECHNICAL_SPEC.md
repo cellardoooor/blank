@@ -492,7 +492,9 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
   - User ID → Connection mapping
   - Broadcast to specific user
   - Automatic reconnection support
-  - Heartbeat/ping-pong (60s read timeout, 54s ping interval)
+  - Heartbeat/ping-pong:
+    - Server-side: 60s read timeout, 54s ping interval
+    - Client-side ping support: Server responds with `{"type":"pong"}` to client ping messages
   - **Accepts all origins** for cloud deployment flexibility
 - **Message Flow**:
   1. Client connects with JWT token via query param: `?token=<jwt>`
@@ -561,6 +563,9 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 - User filtering (exclude self and existing conversations)
 - **Message Input Limit**: 65,536 characters maximum (HTML maxlength attribute)
 - **Browser Push Notifications**: Desktop notifications for incoming messages when window is not focused
+- **Unread Message Counter**: Tab title shows total unread count (e.g., "Blank (3)")
+  - Updates in real-time when new messages arrive
+  - Resets when chat is opened or all messages read
 
 ### 8.2 Layout Structure
 ```
@@ -583,13 +588,106 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 - `userId` - Current user UUID
 
 ### 8.4 WebSocket Protocol
-1. Connection: `ws://host/ws?token=<jwt>`
-2. On open: Log to console
-3. On message: Parse JSON, display in UI, update chat list
-4. On close: Reconnect after 3 seconds
-5. Send: JSON with receiver_id and payload array
 
-### 8.5 Chat List (Left Sidebar)
+#### Connection
+```
+ws://host/ws?token=<jwt>
+```
+
+#### Keep-Alive Mechanism (Client-Side)
+- **Ping Interval**: 30 seconds
+- **Pong Timeout**: 10 seconds (if no pong received, connection considered dead)
+- **Ping Message**:
+```json
+{
+  "type": "ping"
+}
+```
+- **Pong Response**:
+```json
+{
+  "type": "pong"
+}
+```
+
+#### Reconnection Strategy
+- **Exponential Backoff**: Delay increases with each attempt
+  - 1s → 2s → 4s → 8s → ... → 30s (maximum)
+- **Reset**: Counter resets to 0 on successful connection
+- **Timer Cleanup**: All intervals/timeouts cleared on disconnect/logout
+
+#### Message Flow
+1. **On Open**: Start ping interval, reset reconnect counter
+2. **On Message**: Parse JSON, handle pong separately from regular messages
+3. **On Close**: Clear ping interval, schedule reconnection with exponential delay
+4. **Send Message**:
+```json
+{
+  "receiver_id": "uuid",
+  "payload": "message text"
+}
+```
+5. **Read Receipt**:
+```json
+{
+  "type": "read",
+  "partner_id": "uuid"
+}
+```
+
+### 8.5 State Management
+
+#### Global State
+```javascript
+let token = localStorage.getItem('token');           // JWT token
+let userId = localStorage.getItem('userId');         // Current user UUID
+let currentUser = null;                              // User info object
+let ws = null;                                       // WebSocket instance
+let currentChat = null;                              // Currently open chat user ID
+let chats = new Map();                               // userId -> chat data
+let messagesMap = new Map();                         // userId -> messages array
+```
+
+#### Chat Data Structure
+```javascript
+{
+  userId: "uuid",
+  username: "string",
+  lastMessage: "string",
+  lastMessageTime: Date,
+  unreadCount: number
+}
+```
+
+#### Message Data Structure
+```javascript
+{
+  id: "uuid",
+  sender_id: "uuid",
+  receiver_id: "uuid",
+  payload: "string",
+  is_read: boolean,
+  created_at: "ISO8601 timestamp"
+}
+```
+
+### 8.6 Unread Counter Logic
+
+#### Update Triggers
+1. **Incoming message in non-active chat**: Increment unread count
+2. **Opening chat**: Reset unread count to 0 for that chat
+3. **Loading from server**: Sync with server-provided unread counts
+
+#### Title Format
+- **No unread**: `"Blank"`
+- **Has unread**: `"Blank (N)"` where N is total unread count across all chats
+
+#### Implementation Details
+- Counter updates immediately when new message arrives
+- Title updates via `updateDocumentTitle()` function
+- Called on: new message, chat open, initial load, logout
+
+### 8.7 Chat List (Left Sidebar)
 - **Header**: "Chats" title + "New Chat" button (white background, black text, black border)
 - **Chat Items** (sorted by last message time, newest first):
   - Username (bold)
@@ -601,7 +699,7 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 - **Empty List**: When no chats exist, shows "No chats yet" message + "Start New Chat" button
 - **Footer**: Current user name + "Change Password" button + "Logout" button
 
-### 8.6 Chat Window (Right Panel)
+### 8.8 Chat Window (Right Panel)
 - **Header**: Username + Status
 - **Messages Area**: Scrollable container with bubbles
   - **Incoming (other)**: Left-aligned, white background (#fff), black text, rounded corners
@@ -618,7 +716,7 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
   - "New Chat" button in sidebar (normal position)
   - "New Chat" button displayed at bottom of contacts list when empty
 
-### 8.7 New Chat Modal
+### 8.9 New Chat Modal
 1. Click "New Chat" button in sidebar header
 2. Modal opens with single username input field (no close button)
 3. User types username and:
@@ -633,7 +731,7 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 6. Buttons: "Create Chat" and "Cancel" (both white bg, black border, black text)
 7. No close (×) button - use Cancel or click outside to close
 
-### 8.8 Change Password Modal
+### 8.10 Change Password Modal
 1. Click "Change Password" button in sidebar footer
 2. Modal opens with three password input fields (no close button):
    - **Current Password**: placeholder "Enter current password"
@@ -652,12 +750,12 @@ host=<managed_db_host> port=6432 user=<user> password=<password> dbname=<name> s
 6. Buttons: "Change" and "Cancel" (both white bg, black border, black text)
 7. No close (×) button - use Cancel or click outside to close
 
-### 8.9 Timezone & Localization
+### 8.11 Timezone & Localization
 - All timestamps converted to browser's local time
 - Uses `Intl.DateTimeFormat` for formatting
 - English only for all UI text
 
-### 8.9 Styling
+### 8.12 Styling
 - **Background**: White (#ffffff) for all containers
 - **Text**: Black (#000000) for primary text
 - **Font**: Chicago Regular for all UI elements including inputs and textareas

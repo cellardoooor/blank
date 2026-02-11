@@ -4,6 +4,7 @@ Production-ready messenger backend on Go with PostgreSQL and WebSocket support.
 
 ## Features
 
+### Backend
 - REST API + WebSocket (real-time messaging)
 - JWT authentication
 - 1-to-1 messaging (no group chats)
@@ -13,7 +14,12 @@ Production-ready messenger backend on Go with PostgreSQL and WebSocket support.
 - Stateless backend (ready for horizontal scaling)
 - Docker support
 - Terraform infrastructure for Yandex Cloud
+
+### Frontend
 - Custom Chicago font for all UI text
+- **WebSocket Keep-Alive**: Ping/pong every 30s with exponential backoff reconnection
+- **Unread Counter**: Shows total unread messages in tab title (e.g., "Blank (3)")
+- **Relative Favicon Path**: Works correctly regardless of deployment path
 
 ## Deployment Options
 
@@ -243,12 +249,18 @@ yc iam create-token
 
 ## Key Features
 
+### Backend
 - **Stateless**: JWT tokens only, no sessions
 - **Secure**: HTTPS, message encryption (AES-256-GCM), bcrypt passwords
 - **Zero-downtime**: Rolling updates (Dev) or VM replacement (Min)
 - **Auto SSL**: Caddy (Min) or Let's Encrypt (Dev)
 - **Auto-migrations**: Database tables created automatically on startup
-- **Frontend**: Custom Chicago font applied to all UI elements
+
+### Frontend
+- **Custom Font**: Chicago font applied to all UI elements
+- **Stable WebSocket**: Keep-alive with ping/pong (30s interval) and smart reconnection (exponential backoff)
+- **Unread Notifications**: Tab title shows unread message count, updates in real-time
+- **Push Notifications**: Browser notifications for new messages when tab is not active
 
 ## Cost
 

@@ -24,6 +24,18 @@ let viewMode = 'sidebar'; // 'sidebar' | 'chat' - for mobile
 let lastDataRefresh = 0;
 let refreshDebounceTimer = null;
 let messagesAbortController = null;
+let pingInterval = null;
+let pongTimeout = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_DELAY = 30000;
+const PING_INTERVAL = 30000;
+const PONG_TIMEOUT = 10000;
+
+// Favicon blinking for unread messages
+let faviconBlinkInterval = null;
+const ORIGINAL_FAVICON = '/favicon.ico';
+const UNREAD_FAVICON = '/unread.ico';
+const FAVICON_BLINK_INTERVAL = 1000;
 
 const API_URL = '/api';
 const DATA_REFRESH_THROTTLE = 30000;
@@ -163,7 +175,47 @@ function logout() {
         ws = null;
     }
     
+    clearInterval(pingInterval);
+    clearTimeout(pongTimeout);
+    
+    updateDocumentTitle();
     showAuth();
+}
+
+function updateDocumentTitle() {
+    const totalUnread = Array.from(chats.values()).reduce((sum, chat) => sum + (chat.unreadCount || 0), 0);
+    document.title = totalUnread > 0 ? `Blank (${totalUnread})` : 'Blank';
+    
+    // Stop blinking if no unread messages
+    if (totalUnread === 0) {
+        stopFaviconBlink();
+    }
+}
+
+function startFaviconBlink() {
+    if (faviconBlinkInterval) return;
+    
+    let isUnreadIcon = false;
+    const link = document.querySelector('link[rel="icon"]') || document.querySelector('link[rel="shortcut icon"]');
+    
+    faviconBlinkInterval = setInterval(() => {
+        isUnreadIcon = !isUnreadIcon;
+        if (link) {
+            link.href = isUnreadIcon ? UNREAD_FAVICON : ORIGINAL_FAVICON;
+        }
+    }, FAVICON_BLINK_INTERVAL);
+}
+
+function stopFaviconBlink() {
+    if (faviconBlinkInterval) {
+        clearInterval(faviconBlinkInterval);
+        faviconBlinkInterval = null;
+    }
+    
+    const link = document.querySelector('link[rel="icon"]') || document.querySelector('link[rel="shortcut icon"]');
+    if (link) {
+        link.href = ORIGINAL_FAVICON;
+    }
 }
 
 // ==================== APP INITIALIZATION ====================
@@ -217,21 +269,49 @@ function initWebSocket() {
 
     ws.onopen = () => {
         console.log('WebSocket connected');
+        reconnectAttempts = 0;
+        setupPing();
     };
 
     ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
+        if (msg.type === 'pong') {
+            clearTimeout(pongTimeout);
+            return;
+        }
         handleIncomingMessage(msg);
     };
 
     ws.onclose = () => {
-        console.log('WebSocket disconnected, reconnecting in 3s...');
-        setTimeout(initWebSocket, 3000);
+        console.log('WebSocket disconnected');
+        clearInterval(pingInterval);
+        clearTimeout(pongTimeout);
+        
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+        console.log(`Reconnecting in ${delay}ms...`);
+        setTimeout(initWebSocket, delay);
+        reconnectAttempts++;
     };
 
     ws.onerror = (err) => {
         console.error('WebSocket error:', err);
     };
+}
+
+function setupPing() {
+    clearInterval(pingInterval);
+    clearTimeout(pongTimeout);
+    
+    pingInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+            
+            pongTimeout = setTimeout(() => {
+                console.warn('Pong not received, closing connection...');
+                ws.close();
+            }, PONG_TIMEOUT);
+        }
+    }, PING_INTERVAL);
 }
 
 function handleIncomingMessage(msg) {
@@ -278,6 +358,12 @@ function handleIncomingMessage(msg) {
         if (chat) {
             chat.unreadCount = (chat.unreadCount || 0) + 1;
             renderChatList();
+            updateDocumentTitle();
+            
+            // Start favicon blinking if tab is not focused
+            if (!document.hasFocus()) {
+                startFaviconBlink();
+            }
         }
     }
 }
@@ -328,6 +414,7 @@ async function loadChats() {
         });
         
         renderChatList();
+        updateDocumentTitle();
         
     } catch (e) {
         console.error('Failed to load chats:', e);
@@ -466,6 +553,10 @@ async function selectChat(chatUserId) {
     
     chat.unreadCount = 0;
     renderChatList();
+    updateDocumentTitle();
+    
+    // Stop favicon blinking when opening chat with unread messages
+    stopFaviconBlink();
     
     await loadMessages(chatUserId);
     
@@ -999,6 +1090,9 @@ function setupEventListeners() {
         if (document.visibilityState === 'visible' && token) {
             clearTimeout(refreshDebounceTimer);
             refreshDebounceTimer = setTimeout(refreshAllData, 500);
+            
+            // Stop favicon blinking when tab becomes visible
+            stopFaviconBlink();
         }
     });
     
