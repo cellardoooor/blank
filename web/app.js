@@ -644,6 +644,8 @@ function sendMessage() {
     
     updateChatFromMessage(currentChat, optimisticMsg);
     
+    scrollToBottom();
+    
     input.focus();
 }
 
@@ -865,7 +867,9 @@ function escapeHtml(text) {
 
 function scrollToBottom() {
     const container = document.getElementById('messages-container');
-    container.scrollTop = container.scrollHeight;
+    requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight + 30;
+    });
 }
 
 function setupInputResize() {
