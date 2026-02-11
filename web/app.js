@@ -877,12 +877,26 @@ function setupInputResize() {
     input.addEventListener('input', function() {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        scrollToBottom();
     });
     
     input.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             sendMessage();
+        }
+    });
+
+    input.addEventListener('focus', function() {
+        setTimeout(scrollToBottom, 100);
+    });
+}
+
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+        document.documentElement.style.setProperty('--viewport-height', `${window.visualViewport.height}px`);
+        if (document.activeElement === document.getElementById('message-input')) {
+            setTimeout(scrollToBottom, 100);
         }
     });
 }
