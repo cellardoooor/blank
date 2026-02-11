@@ -430,32 +430,26 @@ async function selectChat(chatUserId) {
     
     if (!chat) return;
     
-    // Mobile: switch to chat view
     if (window.innerWidth <= 600) {
         viewMode = 'chat';
         document.getElementById('chat-window').classList.add('active');
         document.getElementById('sidebar').classList.add('hidden-mobile');
+        window.scrollTo(0, 0);
     }
     
-    // Update UI
     document.getElementById('empty-state').style.display = 'none';
     document.getElementById('active-chat').style.display = 'flex';
     
-    // Update chat header
     document.getElementById('chat-username').textContent = chat.username;
     document.getElementById('chat-status').textContent = '';
     
-    // Clear unread count and re-render sidebar
     chat.unreadCount = 0;
     renderChatList();
     
-    // Load messages
     await loadMessages(chatUserId);
     
-    // Send read status via WebSocket
     sendReadStatus(chatUserId);
     
-    // Focus input
     document.getElementById('message-input').focus();
 }
 
@@ -463,15 +457,16 @@ function goToSidebar() {
     viewMode = 'sidebar';
     currentChat = null;
     
-    // Mobile: hide chat, show sidebar
     document.getElementById('chat-window').classList.remove('active');
     document.getElementById('sidebar').classList.remove('hidden-mobile');
     
-    // Reset chat view
+    if (window.innerWidth <= 600) {
+        window.scrollTo(0, 0);
+    }
+    
     document.getElementById('active-chat').style.display = 'none';
     document.getElementById('empty-state').style.display = 'flex';
     
-    // Update sidebar
     renderChatList();
 }
 
@@ -884,12 +879,6 @@ function setupInputResize() {
             e.preventDefault();
             sendMessage();
         }
-    });
-
-    input.addEventListener('focus', function() {
-        setTimeout(() => {
-            this.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 300);
     });
 }
 

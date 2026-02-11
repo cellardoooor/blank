@@ -38,20 +38,28 @@ body {
     font-family: var(--font-family);
     background: var(--white);
     color: var(--black);
-    height: 100vh;
-    height: 100dvh;
-    overflow: hidden;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    margin: 0;
+    padding: 0;
+}
+
+@media (min-width: 601px) {
+    body {
+        height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
+    }
 }
 
 #app {
-    height: 100%;
     display: flex;
     flex-direction: column;
+}
+
+@media (min-width: 601px) {
+    #app {
+        height: 100vh;
+        height: 100dvh;
+    }
 }
 
 /* Universal Button Styles */
@@ -91,7 +99,8 @@ input::placeholder, textarea::placeholder {
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
 }
 
 #auth-card {
@@ -160,17 +169,29 @@ input::placeholder, textarea::placeholder {
 
 #chat-section {
     display: flex;
-    height: 100%;
+}
+
+@media (min-width: 601px) {
+    #chat-section {
+        height: 100vh;
+        height: 100dvh;
+    }
 }
 
 /* ==================== SIDEBAR ==================== */
 
 #sidebar {
     width: 320px;
-    height: 100%;
     border-right: 1px solid var(--gray-300);
     display: flex;
     flex-direction: column;
+}
+
+@media (min-width: 601px) {
+    #sidebar {
+        height: 100vh;
+        height: 100dvh;
+    }
 }
 
 #sidebar-header {
@@ -325,7 +346,13 @@ input::placeholder, textarea::placeholder {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    height: 100%;
+}
+
+@media (min-width: 601px) {
+    #chat-window {
+        height: 100vh;
+        height: 100dvh;
+    }
 }
 
 #empty-state {
@@ -600,13 +627,13 @@ input::placeholder, textarea::placeholder {
 
 @media (max-width: 600px) {
     #chat-section {
-        position: relative;
-        height: 100%;
+        display: block;
+        min-height: 100dvh;
     }
     
     #sidebar {
         width: 100%;
-        height: 100%;
+        min-height: 100dvh;
         border-right: none;
     }
     
@@ -615,26 +642,39 @@ input::placeholder, textarea::placeholder {
     }
     
     #chat-window {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        height: 100%;
+        min-height: 100dvh;
         display: none;
-        flex-direction: column;
     }
     
     #chat-window.active {
         display: flex;
     }
     
-    #chat-window.active #active-chat {
-        display: flex;
+    #active-chat {
+        flex: 1 1 auto;
+        min-height: 0;
     }
     
-    #chat-window.active #empty-state {
-        display: none;
+    #messages-container {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+    }
+    
+    #chat-header {
+        position: sticky;
+        top: 0;
+        background: var(--white);
+        z-index: 10;
+        flex-shrink: 0;
+    }
+    
+    #input-area {
+        position: sticky;
+        bottom: 0;
+        background: var(--white);
+        padding-bottom: max(12px, env(safe-area-inset-bottom));
+        flex-shrink: 0;
     }
     
     #new-chat-btn {
@@ -660,14 +700,6 @@ input::placeholder, textarea::placeholder {
     
     #change-pwd-btn, #logout-btn {
         flex: 1;
-    }
-    
-    #input-area {
-        padding-bottom: max(12px, env(safe-area-inset-bottom));
-    }
-    
-    #messages-container {
-        -webkit-overflow-scrolling: touch;
     }
     
     .modal {
