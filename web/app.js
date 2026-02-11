@@ -21,8 +21,12 @@ let conversationPartners = new Set();
 let messagesMap = new Map(); // userId -> messages array
 let messageStatus = new Map(); // messageId -> 'sending' | 'delivered' | 'read'
 let viewMode = 'sidebar'; // 'sidebar' | 'chat' - for mobile
+let lastDataRefresh = 0;
+let refreshDebounceTimer = null;
+let messagesAbortController = null;
 
 const API_URL = '/api';
+const DATA_REFRESH_THROTTLE = 30000;
 
 function isValidUsername(username) {
     const usernameRegex = /^[a-zA-Z0-9]+$/;
@@ -330,6 +334,24 @@ async function loadChats() {
     }
 }
 
+async function refreshAllData() {
+    if (!token) return;
+    
+    const now = Date.now();
+    if (now - lastDataRefresh < DATA_REFRESH_THROTTLE) return;
+    
+    lastDataRefresh = now;
+    await loadChats();
+    
+    if (currentChat) {
+        await loadMessages(currentChat);
+    }
+    
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        initWebSocket();
+    }
+}
+
 function updateChatFromMessage(partnerId, msg) {
     const text = decodePayload(msg.payload);
     const chat = chats.get(partnerId);
@@ -479,11 +501,16 @@ function sendReadStatus(partnerId) {
 }
 
 async function loadMessages(chatUserId) {
+    messagesAbortController?.abort();
+    messagesAbortController = new AbortController();
+    
     const container = document.getElementById('messages');
     container.innerHTML = '';
     
     try {
-        const res = await apiRequest(`/messages/${chatUserId}`);
+        const res = await apiRequest(`/messages/${chatUserId}`, {
+            signal: messagesAbortController.signal
+        });
         
         if (!res.ok) {
             throw new Error('Failed to load messages: ' + res.statusText);
@@ -504,6 +531,7 @@ async function loadMessages(chatUserId) {
         });
         
     } catch (e) {
+        if (e.name === 'AbortError') return;
         console.error('Failed to load messages:', e);
     }
 }
@@ -965,6 +993,24 @@ function setupEventListeners() {
             goToSidebar();
         }
     });
+    
+    // Refresh on tab visibility change (debounced)
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible' && token) {
+            clearTimeout(refreshDebounceTimer);
+            refreshDebounceTimer = setTimeout(refreshAllData, 500);
+        }
+    });
+    
+    // Refresh on page restore from bfcache
+    window.addEventListener('pageshow', function(e) {
+        if (e.persisted && token) {
+            refreshAllData();
+        }
+    });
+    
+    // Refresh on network reconnect
+    window.addEventListener('online', refreshAllData);
 }
 
 // Initialize when DOM is ready
