@@ -82,7 +82,7 @@ input, textarea {
     font-family: var(--font-family);
     background: var(--white);
     color: var(--black);
-    font-size: 14px;
+    font-size: 15px;
 }
 
 input:focus, textarea:focus {
@@ -288,7 +288,7 @@ input::placeholder, textarea::placeholder {
 }
 
 .chat-preview {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--gray-600);
     white-space: nowrap;
     overflow: hidden;
@@ -433,14 +433,14 @@ input::placeholder, textarea::placeholder {
 }
 
 .message-text {
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.4;
     margin-bottom: 4px;
     white-space: pre-wrap;
 }
 
 .message-time {
-    font-size: 11px;
+    font-size: 12px;
     opacity: 0.7;
     text-align: right;
 }
@@ -626,6 +626,18 @@ input::placeholder, textarea::placeholder {
 }
 
 @media (max-width: 600px) {
+    input, textarea {
+        font-size: 16px;
+    }
+    
+    .message-text {
+        font-size: 16px;
+    }
+    
+    .chat-preview {
+        font-size: 15px;
+    }
+    
     #chat-section {
         display: block;
         min-height: 100dvh;
@@ -675,6 +687,11 @@ input::placeholder, textarea::placeholder {
         background: var(--white);
         padding-bottom: max(12px, env(safe-area-inset-bottom));
         flex-shrink: 0;
+    }
+    
+    #message-input {
+        height: 44px;
+        padding: 10px 16px;
     }
     
     #new-chat-btn {

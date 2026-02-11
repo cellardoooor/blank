@@ -62,7 +62,7 @@
                         <div id="messages"></div>
                     </div>
                     <div id="input-area">
-                        <textarea id="message-input" placeholder="Type a message..." rows="1" maxlength="65536"></textarea>
+                        <textarea id="message-input" placeholder="Type a message..." rows="1" maxlength="65536" autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true"></textarea>
                         <button onclick="sendMessage()" id="send-btn">➤</button>
                     </div>
                 </div>
@@ -78,7 +78,7 @@
             </div>
             <div class="modal-body">
                 <label for="new-chat-username" class="input-label">Username</label>
-                <input type="text" id="new-chat-username" placeholder="Enter username" autocomplete="off">
+                <input type="text" id="new-chat-username" name="q" placeholder="Enter username" autocomplete="search" autocapitalize="none" autocorrect="off">
                 <div id="new-chat-error" class="error-message"></div>
             </div>
             <div class="modal-footer">
