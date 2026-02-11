@@ -410,6 +410,7 @@ input::placeholder, textarea::placeholder {
     flex-direction: column;
     justify-content: flex-end;
     min-height: 100%;
+    padding-bottom: 70px;
 }
 
 .message {
@@ -636,6 +637,10 @@ input::placeholder, textarea::placeholder {
     
     .chat-preview {
         font-size: 15px;
+    }
+    
+    #messages {
+        padding-bottom: 90px;
     }
     
     #chat-section {
