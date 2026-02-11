@@ -42,24 +42,33 @@ body {
     padding: 0;
 }
 
+@media (max-width: 600px) {
+    body {
+        height: 100dvh;
+        overflow: hidden;
+    }
+    
+    #app {
+        height: 100%;
+    }
+}
+
 @media (min-width: 601px) {
     body {
         height: 100vh;
         height: 100dvh;
         overflow: hidden;
     }
+    
+    #app {
+        height: 100vh;
+        height: 100dvh;
+    }
 }
 
 #app {
     display: flex;
     flex-direction: column;
-}
-
-@media (min-width: 601px) {
-    #app {
-        height: 100vh;
-        height: 100dvh;
-    }
 }
 
 /* Universal Button Styles */
@@ -410,7 +419,6 @@ input::placeholder, textarea::placeholder {
     flex-direction: column;
     justify-content: flex-end;
     min-height: 100%;
-    padding-bottom: 70px;
 }
 
 .message {
@@ -639,19 +647,17 @@ input::placeholder, textarea::placeholder {
         font-size: 15px;
     }
     
-    #messages {
-        padding-bottom: 90px;
-    }
-    
     #chat-section {
-        display: block;
-        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
     }
     
     #sidebar {
         width: 100%;
-        min-height: 100dvh;
+        height: 100%;
         border-right: none;
+        flex-shrink: 0;
     }
     
     #sidebar.hidden-mobile {
@@ -659,8 +665,9 @@ input::placeholder, textarea::placeholder {
     }
     
     #chat-window {
-        min-height: 100dvh;
+        height: 100%;
         display: none;
+        flex-direction: column;
     }
     
     #chat-window.active {
@@ -668,30 +675,26 @@ input::placeholder, textarea::placeholder {
     }
     
     #active-chat {
-        flex: 1 1 auto;
-        min-height: 0;
-    }
-    
-    #messages-container {
-        flex: 1 1 auto;
-        min-height: 0;
-        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
     }
     
     #chat-header {
-        position: sticky;
-        top: 0;
-        background: var(--white);
-        z-index: 10;
         flex-shrink: 0;
+        background: var(--white);
+    }
+    
+    #messages-container {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
     }
     
     #input-area {
-        position: sticky;
-        bottom: 0;
+        flex-shrink: 0;
         background: var(--white);
         padding-bottom: max(12px, env(safe-area-inset-bottom));
-        flex-shrink: 0;
     }
     
     #message-input {

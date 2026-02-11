@@ -434,7 +434,6 @@ async function selectChat(chatUserId) {
         viewMode = 'chat';
         document.getElementById('chat-window').classList.add('active');
         document.getElementById('sidebar').classList.add('hidden-mobile');
-        window.scrollTo(0, 0);
     }
     
     document.getElementById('empty-state').style.display = 'none';
@@ -450,11 +449,11 @@ async function selectChat(chatUserId) {
     
     sendReadStatus(chatUserId);
     
-    document.getElementById('message-input').focus();
+    requestAnimationFrame(() => {
+        requestAnimationFrame(scrollToBottom);
+    });
     
-    if (window.innerWidth <= 600) {
-        setTimeout(scrollToBottom, 100);
-    }
+    document.getElementById('message-input').focus();
 }
 
 function goToSidebar() {
@@ -463,10 +462,6 @@ function goToSidebar() {
     
     document.getElementById('chat-window').classList.remove('active');
     document.getElementById('sidebar').classList.remove('hidden-mobile');
-    
-    if (window.innerWidth <= 600) {
-        window.scrollTo(0, 0);
-    }
     
     document.getElementById('active-chat').style.display = 'none';
     document.getElementById('empty-state').style.display = 'flex';
@@ -511,8 +506,6 @@ async function loadMessages(chatUserId) {
     } catch (e) {
         console.error('Failed to load messages:', e);
     }
-    
-    scrollToBottom();
 }
 
 function displayMessage(msg, status = '', forcedStatus = '') {
@@ -537,7 +530,6 @@ function displayMessage(msg, status = '', forcedStatus = '') {
     `;
     
     container.appendChild(div);
-    scrollToBottom();
 }
 
 function replaceOptimisticMessage(serverMsg) {
@@ -644,7 +636,7 @@ function sendMessage() {
     
     updateChatFromMessage(currentChat, optimisticMsg);
     
-    scrollToBottom();
+    queueMicrotask(scrollToBottom);
     
     input.focus();
 }
@@ -867,9 +859,7 @@ function escapeHtml(text) {
 
 function scrollToBottom() {
     const container = document.getElementById('messages-container');
-    requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight + 30;
-    });
+    container.scrollTop = container.scrollHeight;
 }
 
 function setupInputResize() {
