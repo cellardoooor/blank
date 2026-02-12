@@ -111,8 +111,7 @@ async function login() {
         token = data.token;
         localStorage.setItem('token', token);
         
-        const authSection = document.getElementById('auth-section');
-        if (authSection) authSection.remove();
+        document.getElementById('auth-section').style.display = 'none';
         
         await initApp();
     } catch (e) {
@@ -152,63 +151,11 @@ async function register() {
         token = data.token;
         localStorage.setItem('token', token);
         
-        const authSection = document.getElementById('auth-section');
-        if (authSection) authSection.remove();
+        document.getElementById('auth-section').style.display = 'none';
         
         await initApp();
     } catch (e) {
         errorEl.textContent = 'Network error: ' + e.message;
-    }
-}
-
-function logout() {
-    localStorage.clear();
-    token = null;
-    userId = null;
-    currentUser = null;
-    currentChat = null;
-    chats.clear();
-    messagesMap.clear();
-    
-    document.getElementById('messages').innerHTML = '';
-    document.getElementById('empty-state').style.display = 'flex';
-    document.getElementById('active-chat').style.display = 'none';
-    
-    if (ws) {
-        ws.close();
-        ws = null;
-    }
-    
-    clearInterval(pingInterval);
-    clearTimeout(pongTimeout);
-    
-    updateDocumentTitle();
-    showAuth();
-}
-
-function updateDocumentTitle() {
-    const totalUnread = Array.from(chats.values()).reduce((sum, chat) => sum + (chat.unreadCount || 0), 0);
-    document.title = totalUnread > 0 ? `Blank (${totalUnread})` : 'Blank';
-    
-    // Update favicon based on unread status
-    if (totalUnread > 0) {
-        setUnreadFavicon();
-    } else {
-        setOriginalFavicon();
-    }
-}
-
-function setUnreadFavicon() {
-    const link = document.querySelector('link[rel="icon"]') || document.querySelector('link[rel="shortcut icon"]');
-    if (link && link.href !== UNREAD_FAVICON) {
-        link.href = UNREAD_FAVICON;
-    }
-}
-
-function setOriginalFavicon() {
-    const link = document.querySelector('link[rel="icon"]') || document.querySelector('link[rel="shortcut icon"]');
-    if (link && link.href !== ORIGINAL_FAVICON) {
-        link.href = ORIGINAL_FAVICON;
     }
 }
 
