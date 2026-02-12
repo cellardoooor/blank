@@ -111,6 +111,9 @@ async function login() {
         token = data.token;
         localStorage.setItem('token', token);
         
+        const authSection = document.getElementById('auth-section');
+        if (authSection) authSection.remove();
+        
         await initApp();
     } catch (e) {
         errorEl.textContent = 'Network error: ' + e.message;
@@ -148,6 +151,9 @@ async function register() {
         const data = await res.json();
         token = data.token;
         localStorage.setItem('token', token);
+        
+        const authSection = document.getElementById('auth-section');
+        if (authSection) authSection.remove();
         
         await initApp();
     } catch (e) {
