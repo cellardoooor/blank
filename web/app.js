@@ -413,7 +413,7 @@ async function loadChats() {
     }
 }
 
-async function refreshAllData() {
+async function refreshAllData(preserveScroll = true) {
     if (!token) return;
     
     const now = Date.now();
@@ -423,7 +423,7 @@ async function refreshAllData() {
     await loadChats();
     
     if (currentChat) {
-        await loadMessages(currentChat);
+        await loadMessages(currentChat, preserveScroll);
     }
     
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -583,11 +583,27 @@ function sendReadStatus(partnerId) {
     }
 }
 
-async function loadMessages(chatUserId) {
+async function loadMessages(chatUserId, preserveScroll = false) {
     messagesAbortController?.abort();
     messagesAbortController = new AbortController();
     
     const container = document.getElementById('messages');
+    const messagesContainer = document.getElementById('messages-container');
+    
+    // Save first visible message ID before clearing
+    let firstVisibleMsgId = null;
+    if (preserveScroll && messagesContainer) {
+        const visibleMessages = container.querySelectorAll('.message');
+        for (const msgEl of visibleMessages) {
+            const rect = msgEl.getBoundingClientRect();
+            const containerRect = messagesContainer.getBoundingClientRect();
+            if (rect.top >= containerRect.top) {
+                firstVisibleMsgId = msgEl.dataset.messageId;
+                break;
+            }
+        }
+    }
+    
     container.innerHTML = '';
     
     try {
@@ -612,6 +628,14 @@ async function loadMessages(chatUserId) {
                 displayMessage(msg, '', '');
             }
         });
+        
+        // Restore scroll position to the first visible message
+        if (preserveScroll && firstVisibleMsgId) {
+            const targetMsg = container.querySelector(`[data-message-id="${firstVisibleMsgId}"]`);
+            if (targetMsg && messagesContainer) {
+                targetMsg.scrollIntoView({ block: 'start' });
+            }
+        }
         
     } catch (e) {
         if (e.name === 'AbortError') return;
@@ -1091,7 +1115,7 @@ function setupEventListeners() {
     // Refresh on page restore from bfcache
     window.addEventListener('pageshow', function(e) {
         if (e.persisted && token) {
-            refreshAllData();
+            refreshAllData(true); // preserve scroll position
         }
     });
     
