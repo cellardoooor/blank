@@ -95,10 +95,54 @@ async function apiRequest(endpoint, options = {}) {
     }
 }
 
+function logout() {
+    // Clear localStorage
+    localStorage.removeItem('token');
+    localStorage.removeItem('userId');
+    
+    // Close WebSocket
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+    
+    // Clear intervals
+    clearInterval(pingInterval);
+    clearTimeout(pongTimeout);
+    clearTimeout(refreshDebounceTimer);
+    
+    // Reset state
+    token = null;
+    userId = null;
+    currentUser = null;
+    currentChat = null;
+    chats.clear();
+    messagesMap.clear();
+    messageStatus.clear();
+    conversationPartners.clear();
+    reconnectAttempts = 0;
+    
+    // Hide loading and show auth
+    hideLoading();
+    showAuth();
+}
+
+function showLoading() {
+    document.getElementById('loading-screen').classList.remove('hidden');
+    document.getElementById('auth-section').classList.add('hidden');
+    document.getElementById('chat-section').classList.add('hidden');
+}
+
+function hideLoading() {
+    document.getElementById('loading-screen').classList.add('hidden');
+}
+
 // Initialize application
 if (token) {
+    showLoading();
     initApp();
 } else {
+    hideLoading();
     showAuth();
 }
 
@@ -212,8 +256,9 @@ async function register() {
 
 async function initApp() {
     try {
-        document.getElementById('auth-section').style.display = 'none';
+        document.getElementById('auth-section').classList.add('hidden');
         document.getElementById('chat-section').classList.remove('hidden');
+        hideLoading();
         
         // Load current user info
         const meRes = await apiRequest('/me');
@@ -243,6 +288,7 @@ async function initApp() {
         
     } catch (e) {
         console.error('Failed to initialize app:', e);
+        hideLoading();
         showAuth();
     }
 }
