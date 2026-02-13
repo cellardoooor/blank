@@ -375,7 +375,7 @@ async function loadChats() {
                 userId: chat.user_id,
                 username: chat.username || chat.user_id,
                 lastMessage: chat.last_message,
-                lastMessageTime: new Date(chat.last_message_time),
+                lastMessageTime: chat.last_message_time ? new Date(chat.last_message_time) : new Date(0),
                 unreadCount: chat.unread_count || 0
             });
             conversationPartners.add(chat.user_id);
@@ -457,6 +457,9 @@ function renderChatList() {
 
     // Sort chats by last message time (newest first)
     const sortedChats = Array.from(chats.values()).sort((a, b) => {
+        // Handle invalid dates - push them to the bottom
+        if (!a.lastMessageTime || isNaN(a.lastMessageTime.getTime())) return 1;
+        if (!b.lastMessageTime || isNaN(b.lastMessageTime.getTime())) return -1;
         return b.lastMessageTime - a.lastMessageTime;
     });
 
