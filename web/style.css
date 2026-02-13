@@ -105,7 +105,7 @@ input, textarea {
     font-family: var(--font-family);
     background: var(--white);
     color: var(--black);
-    font-size: 15px;
+    font-size: 16px;
 }
 
 input:focus, textarea:focus {
@@ -291,10 +291,11 @@ input::placeholder, textarea::placeholder {
 
 .chat-username {
     font-weight: 600;
-    font-size: 15px;
+    font-size: 16px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
 }
 
 .chat-time {
@@ -311,7 +312,7 @@ input::placeholder, textarea::placeholder {
 }
 
 .chat-preview {
-    font-size: 14px;
+    font-size: 15px;
     color: var(--gray-600);
     white-space: nowrap;
     overflow: hidden;
@@ -340,7 +341,7 @@ input::placeholder, textarea::placeholder {
 }
 
 #current-user {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 500;
 }
 
@@ -456,8 +457,8 @@ input::placeholder, textarea::placeholder {
 }
 
 .message-text {
-    font-size: 15px;
-    line-height: 1.4;
+    font-size: 16px;
+    line-height: 1.5;
     margin-bottom: 4px;
     white-space: pre-wrap;
 }
@@ -616,9 +617,10 @@ input::placeholder, textarea::placeholder {
 
 .modal-footer button {
     width: auto;
-    padding: 10px 20px;
+    padding: 12px 20px;
     margin-bottom: 0;
-    height: 40px;
+    height: auto;
+    font-size: 15px;
 }
 
 /* ==================== SCROLLBAR ==================== */
