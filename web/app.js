@@ -49,6 +49,19 @@ function setOriginalFavicon() {
     }
 }
 
+function updateDocumentTitle() {
+    let totalUnread = 0;
+    chats.forEach(chat => {
+        totalUnread += chat.unreadCount || 0;
+    });
+
+    if (totalUnread > 0) {
+        document.title = `(${totalUnread}) Blank`;
+    } else {
+        document.title = 'Blank';
+    }
+}
+
 const API_URL = '/api';
 const DATA_REFRESH_THROTTLE = 30000;
 
