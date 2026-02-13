@@ -35,6 +35,20 @@ const PONG_TIMEOUT = 10000;
 const ORIGINAL_FAVICON = '/favicon.ico';
 const UNREAD_FAVICON = '/unread.ico';
 
+function setUnreadFavicon() {
+    const link = document.querySelector('link[rel="icon"]');
+    if (link && link.href !== UNREAD_FAVICON) {
+        link.href = UNREAD_FAVICON;
+    }
+}
+
+function setOriginalFavicon() {
+    const link = document.querySelector('link[rel="icon"]');
+    if (link && link.href !== ORIGINAL_FAVICON) {
+        link.href = ORIGINAL_FAVICON;
+    }
+}
+
 const API_URL = '/api';
 const DATA_REFRESH_THROTTLE = 30000;
 
@@ -43,12 +57,18 @@ function isValidUsername(username) {
     return usernameRegex.test(username);
 }
 
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.content : '';
+}
+
 async function apiRequest(endpoint, options = {}) {
     try {
         const res = await fetch(`${API_URL}${endpoint}`, {
             ...options,
             headers: {
                 'Authorization': `Bearer ${token}`,
+                'X-CSRF-Token': getCsrfToken(),
                 ...options.headers
             },
             signal: options.signal || AbortSignal.timeout(10000)
@@ -73,7 +93,7 @@ if (token) {
 
 function showAuth() {
     document.getElementById('auth-section').style.display = 'flex';
-    document.getElementById('chat-section').style.display = 'none';
+    document.getElementById('chat-section').classList.add('hidden');
     document.getElementById('username').value = '';
     document.getElementById('password').value = '';
     document.getElementById('auth-error').textContent = '';
@@ -97,7 +117,10 @@ async function login() {
     try {
         const res = await fetch(`${API_URL}/auth/login`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': getCsrfToken()
+            },
             body: JSON.stringify({ username, password })
         });
 
@@ -110,9 +133,9 @@ async function login() {
         const data = await res.json();
         token = data.token;
         localStorage.setItem('token', token);
-        
+
         document.getElementById('auth-section').style.display = 'none';
-        
+
         await initApp();
     } catch (e) {
         errorEl.textContent = 'Network error: ' + e.message;
@@ -137,7 +160,10 @@ async function register() {
     try {
         const res = await fetch(`${API_URL}/auth/register`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': getCsrfToken()
+            },
             body: JSON.stringify({ username, password })
         });
 
@@ -150,9 +176,9 @@ async function register() {
         const data = await res.json();
         token = data.token;
         localStorage.setItem('token', token);
-        
+
         document.getElementById('auth-section').style.display = 'none';
-        
+
         await initApp();
     } catch (e) {
         errorEl.textContent = 'Network error: ' + e.message;
@@ -164,7 +190,7 @@ async function register() {
 async function initApp() {
     try {
         document.getElementById('auth-section').style.display = 'none';
-        document.getElementById('chat-section').style.display = 'flex';
+        document.getElementById('chat-section').classList.remove('hidden');
         
         // Load current user info
         const meRes = await apiRequest('/me');
@@ -432,15 +458,15 @@ function renderChatList() {
     
     if (sortedChats.length === 0) {
         if (emptyContainer) {
-            emptyContainer.style.display = 'flex';
+            emptyContainer.classList.remove('hidden');
             container.appendChild(emptyContainer);
         }
         return;
     }
-    
+
     // Hide empty state when there are chats
     if (emptyContainer) {
-        emptyContainer.style.display = 'none';
+        emptyContainer.classList.add('hidden');
     }
     
     sortedChats.forEach(chat => {
@@ -485,7 +511,7 @@ async function selectChat(chatUserId) {
     }
     
     document.getElementById('empty-state').style.display = 'none';
-    document.getElementById('active-chat').style.display = 'flex';
+    document.getElementById('active-chat').classList.remove('hidden');
     
     document.getElementById('chat-username').textContent = chat.username;
     document.getElementById('chat-status').textContent = '';
@@ -515,7 +541,7 @@ function goToSidebar() {
     document.getElementById('chat-window').classList.remove('active');
     document.getElementById('sidebar').classList.remove('hidden-mobile');
     
-    document.getElementById('active-chat').style.display = 'none';
+    document.getElementById('active-chat').classList.add('hidden');
     document.getElementById('empty-state').style.display = 'flex';
     
     renderChatList();
@@ -727,14 +753,19 @@ function sendMessage() {
 
 function showNewChatModal() {
     const modal = document.getElementById('new-chat-modal');
+    const input = document.getElementById('new-chat-username');
     modal.classList.add('active');
-    document.getElementById('new-chat-username').value = '';
+    input.disabled = false;
+    input.value = '';
     document.getElementById('new-chat-error').textContent = '';
-    document.getElementById('new-chat-username').focus();
+    input.focus();
 }
 
 function closeNewChatModal() {
-    document.getElementById('new-chat-modal').classList.remove('active');
+    const modal = document.getElementById('new-chat-modal');
+    const input = document.getElementById('new-chat-username');
+    modal.classList.remove('active');
+    input.disabled = true;
 }
 
 async function createChatByUsername() {
@@ -803,17 +834,32 @@ async function startNewChat(userId, username) {
 
 function showChangePasswordModal() {
     const modal = document.getElementById('change-password-modal');
+    const oldPass = document.getElementById('old-password');
+    const newPass = document.getElementById('new-password');
+    const confirmPass = document.getElementById('confirm-password');
+
     modal.classList.add('active');
-    document.getElementById('old-password').value = '';
-    document.getElementById('new-password').value = '';
-    document.getElementById('confirm-password').value = '';
+    oldPass.disabled = false;
+    newPass.disabled = false;
+    confirmPass.disabled = false;
+    oldPass.value = '';
+    newPass.value = '';
+    confirmPass.value = '';
     document.getElementById('change-password-error').textContent = '';
     document.getElementById('change-password-success').textContent = '';
-    document.getElementById('old-password').focus();
+    oldPass.focus();
 }
 
 function closeChangePasswordModal() {
-    document.getElementById('change-password-modal').classList.remove('active');
+    const modal = document.getElementById('change-password-modal');
+    const oldPass = document.getElementById('old-password');
+    const newPass = document.getElementById('new-password');
+    const confirmPass = document.getElementById('confirm-password');
+
+    modal.classList.remove('active');
+    oldPass.disabled = true;
+    newPass.disabled = true;
+    confirmPass.disabled = true;
 }
 
 async function changePassword() {
@@ -1053,9 +1099,20 @@ function setupEventListeners() {
         if (document.visibilityState === 'visible' && token) {
             clearTimeout(refreshDebounceTimer);
             refreshDebounceTimer = setTimeout(refreshAllData, 500);
-            
+
             // Reset favicon when tab becomes visible
             setOriginalFavicon();
+
+            // Clear unread count for active chat when returning to tab
+            if (currentChat) {
+                const chat = chats.get(currentChat);
+                if (chat && chat.unreadCount > 0) {
+                    chat.unreadCount = 0;
+                    renderChatList();
+                    updateDocumentTitle();
+                    sendReadStatus(currentChat);
+                }
+            }
         }
     });
     
