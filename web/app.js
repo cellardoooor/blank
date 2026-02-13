@@ -114,6 +114,11 @@ async function login() {
         return;
     }
 
+    if (password.length < 5) {
+        errorEl.textContent = 'Password must be at least 5 characters';
+        return;
+    }
+
     try {
         const res = await fetch(`${API_URL}/auth/login`, {
             method: 'POST',
@@ -154,6 +159,11 @@ async function register() {
 
     if (!isValidUsername(username)) {
         errorEl.textContent = 'Username must contain only latin letters and digits';
+        return;
+    }
+
+    if (password.length < 5) {
+        errorEl.textContent = 'Password must be at least 5 characters';
         return;
     }
 
@@ -288,19 +298,19 @@ function handleIncomingMessage(msg) {
     }
 
     const partnerId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
-    
+    const isIncoming = msg.sender_id !== userId;
+
     // Add to messages map
     if (!messagesMap.has(partnerId)) {
         messagesMap.set(partnerId, []);
     }
     messagesMap.get(partnerId).push(msg);
-    
-    // Update chat list
-    updateChatFromMessage(partnerId, msg);
-    
-    
+
+    // Update chat list (includes unread count increment for non-active chats)
+    updateChatFromMessage(partnerId, msg, isIncoming && currentChat !== partnerId);
+
     // Show push notification for incoming messages
-    if (msg.sender_id !== userId) {
+    if (isIncoming) {
         const text = decodePayload(msg.payload);
         const chat = chats.get(partnerId);
         const senderName = chat ? chat.username : 'User';
@@ -319,17 +329,10 @@ function handleIncomingMessage(msg) {
         } else {
             displayMessage(msg, '', '');
         }
-    } else if (msg.sender_id !== userId) {
-        // Incoming message in non-active chat - increment unread
-        const chat = chats.get(partnerId);
-        if (chat) {
-            chat.unreadCount = (chat.unreadCount || 0) + 1;
-            renderChatList();
-            updateDocumentTitle();
-            
-            // Set unread favicon
-            setUnreadFavicon();
-        }
+    } else if (isIncoming) {
+        // Incoming message in non-active chat - update UI
+        updateDocumentTitle();
+        setUnreadFavicon();
     }
 }
 
@@ -404,13 +407,16 @@ async function refreshAllData(preserveScroll = true) {
     }
 }
 
-function updateChatFromMessage(partnerId, msg) {
+function updateChatFromMessage(partnerId, msg, incrementUnread = false) {
     const text = decodePayload(msg.payload);
     const chat = chats.get(partnerId);
-    
+
     if (chat) {
         chat.lastMessage = text;
         chat.lastMessageTime = new Date(msg.created_at);
+        if (incrementUnread) {
+            chat.unreadCount = (chat.unreadCount || 0) + 1;
+        }
     } else {
         // New chat - need to fetch user info
         fetchUserInfo(partnerId).then(user => {
@@ -419,7 +425,8 @@ function updateChatFromMessage(partnerId, msg) {
                     userId: partnerId,
                     username: user.username,
                     lastMessage: text,
-                    lastMessageTime: new Date(msg.created_at)
+                    lastMessageTime: new Date(msg.created_at),
+                    unreadCount: incrementUnread ? 1 : 0
                 });
                 conversationPartners.add(partnerId);
                 renderChatList();
@@ -427,7 +434,7 @@ function updateChatFromMessage(partnerId, msg) {
         });
         return;
     }
-    
+
     // Move chat to top by re-rendering
     renderChatList();
 }
@@ -447,19 +454,20 @@ async function fetchUserInfo(userId) {
 function renderChatList() {
     const container = document.getElementById('contacts-list');
     const emptyContainer = document.getElementById('empty-state-container');
-    
+
     // Sort chats by last message time (newest first)
     const sortedChats = Array.from(chats.values()).sort((a, b) => {
         return b.lastMessageTime - a.lastMessageTime;
     });
-    
-    // Clear container (but keep empty state container)
-    container.innerHTML = '';
-    
+
+    // Remove only chat items, keep empty state container
+    const chatItems = container.querySelectorAll('.chat-item');
+    chatItems.forEach(item => item.remove());
+
     if (sortedChats.length === 0) {
+        // No chats - show empty state
         if (emptyContainer) {
             emptyContainer.classList.remove('hidden');
-            container.appendChild(emptyContainer);
         }
         return;
     }
@@ -755,7 +763,6 @@ function showNewChatModal() {
     const modal = document.getElementById('new-chat-modal');
     const input = document.getElementById('new-chat-username');
     modal.classList.add('active');
-    input.disabled = false;
     input.value = '';
     document.getElementById('new-chat-error').textContent = '';
     input.focus();
@@ -763,9 +770,7 @@ function showNewChatModal() {
 
 function closeNewChatModal() {
     const modal = document.getElementById('new-chat-modal');
-    const input = document.getElementById('new-chat-username');
     modal.classList.remove('active');
-    input.disabled = true;
 }
 
 async function createChatByUsername() {
@@ -839,9 +844,6 @@ function showChangePasswordModal() {
     const confirmPass = document.getElementById('confirm-password');
 
     modal.classList.add('active');
-    oldPass.disabled = false;
-    newPass.disabled = false;
-    confirmPass.disabled = false;
     oldPass.value = '';
     newPass.value = '';
     confirmPass.value = '';
@@ -852,14 +854,7 @@ function showChangePasswordModal() {
 
 function closeChangePasswordModal() {
     const modal = document.getElementById('change-password-modal');
-    const oldPass = document.getElementById('old-password');
-    const newPass = document.getElementById('new-password');
-    const confirmPass = document.getElementById('confirm-password');
-
     modal.classList.remove('active');
-    oldPass.disabled = true;
-    newPass.disabled = true;
-    confirmPass.disabled = true;
 }
 
 async function changePassword() {

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{csrf_token}}">
     <title>Blank</title>
@@ -21,7 +21,7 @@
             </div>
         </div>
 
-<!-- Chat Section - Two Panel Layout -->
+        <!-- Chat Section - Two Panel Layout -->
         <div id="chat-section" class="hidden">
             <!-- Left Sidebar - Chat List -->
             <div id="sidebar">
@@ -29,7 +29,7 @@
                     <img src="/favicon.ico" id="logo-icon" alt="Logo">
                     <button onclick="showNewChatModal()" id="new-chat-btn">New Chat</button>
                 </div>
-<div id="contacts-list">
+                <div id="contacts-list">
                     <div id="empty-state-container" class="hidden">
                         <p style="color: #666666; margin-bottom: 16px;">No chats yet</p>
                         <button onclick="showNewChatModal()" class="btn-secondary" style="width: auto;">Start New Chat</button>
@@ -79,7 +79,7 @@
             </div>
             <div class="modal-body">
                 <label for="new-chat-username" class="input-label">Username</label>
-                <input type="text" id="new-chat-username" name="username" placeholder="Enter username" autocomplete="search" autocapitalize="none" autocorrect="off" disabled>
+                <input type="text" id="new-chat-username" name="username" placeholder="Enter username" autocomplete="search" autocapitalize="none" autocorrect="off">
                 <div id="new-chat-error" class="error-message"></div>
             </div>
             <div class="modal-footer">
@@ -97,11 +97,11 @@
             </div>
             <div class="modal-body">
                 <label for="old-password" class="input-label">Current Password</label>
-<input type="password" id="old-password" placeholder="Enter current password" autocomplete="off" disabled>
+<input type="password" id="old-password" placeholder="Enter current password" autocomplete="off">
                 <label for="new-password" class="input-label">New Password</label>
-                <input type="password" id="new-password" placeholder="Enter new password (min 5 characters)" autocomplete="off" minlength="5" required disabled>
+                <input type="password" id="new-password" placeholder="Enter new password (min 5 characters)" autocomplete="off" minlength="5" required>
                 <label for="confirm-password" class="input-label">Confirm New Password</label>
-                <input type="password" id="confirm-password" placeholder="Confirm new password" autocomplete="off" minlength="5" required disabled>
+                <input type="password" id="confirm-password" placeholder="Confirm new password" autocomplete="off" minlength="5" required>
                 <div id="change-password-error" class="error-message"></div>
                 <div id="change-password-success" class="success-message"></div>
             </div>
