@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 	"messenger/internal/auth"
+	"messenger/internal/model"
 	"messenger/internal/service"
 )
 

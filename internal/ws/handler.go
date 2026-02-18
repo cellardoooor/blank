@@ -29,6 +29,7 @@ type Client struct {
 	sendReadStatus chan ReadStatus
 	userID         uuid.UUID
 	messageService *service.MessageService
+	userService    *service.UserService
 }
 
 type Handler struct {
@@ -72,6 +73,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sendReadStatus: make(chan ReadStatus, 256),
 		userID:         userID,
 		messageService: h.messageService,
+		userService:    h.userService,
 	}
 
 	h.hub.Register(client)
