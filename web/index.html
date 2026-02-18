@@ -80,7 +80,10 @@
             </div>
             <div class="modal-body">
                 <label for="new-chat-username" class="input-label">Username</label>
-                <input type="text" id="new-chat-username" name="username" placeholder="Enter username" autocomplete="search" autocapitalize="none" autocorrect="off">
+                <div class="search-container">
+                    <input type="text" id="new-chat-username" name="username" placeholder="Enter username" autocomplete="search" autocapitalize="none" autocorrect="off">
+                    <div id="user-search-results" class="dropdown hidden"></div>
+                </div>
                 <div id="new-chat-error" class="error-message"></div>
             </div>
             <div class="modal-footer">

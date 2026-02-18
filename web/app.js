@@ -821,6 +821,9 @@ function sendMessage() {
 
 // ==================== NEW CHAT MODAL ====================
 
+let userSearchDebounceTimer = null;
+const USER_SEARCH_DEBOUNCE = 300;
+
 function showNewChatModal() {
     const modal = document.getElementById('new-chat-modal');
     const input = document.getElementById('new-chat-username');
@@ -828,15 +831,108 @@ function showNewChatModal() {
     input.value = '';
     document.getElementById('new-chat-error').textContent = '';
     input.focus();
+
+    // Add input event listener for autocomplete
+    input.addEventListener('input', handleUserSearchInput);
+    // Hide dropdown when clicking outside
+    document.addEventListener('click', handleClickOutsideDropdown);
+
+    // Load all users immediately
+    searchUsers('');
 }
 
 function closeNewChatModal() {
     const modal = document.getElementById('new-chat-modal');
+    const input = document.getElementById('new-chat-username');
+    const dropdown = document.getElementById('user-search-results');
     modal.classList.remove('active');
+    dropdown.classList.add('hidden');
+
+    // Remove event listeners
+    input.removeEventListener('input', handleUserSearchInput);
+    document.removeEventListener('click', handleClickOutsideDropdown);
+
+    // Clear debounce timer
+    clearTimeout(userSearchDebounceTimer);
+}
+
+function handleUserSearchInput(e) {
+    const query = e.target.value.trim();
+
+    clearTimeout(userSearchDebounceTimer);
+
+    userSearchDebounceTimer = setTimeout(() => {
+        searchUsers(query);
+    }, USER_SEARCH_DEBOUNCE);
+}
+
+async function searchUsers(query) {
+    const dropdown = document.getElementById('user-search-results');
+
+    try {
+        const res = await apiRequest(`/users/search?q=${encodeURIComponent(query)}`);
+
+        if (!res.ok) {
+            hideUserSearchDropdown();
+            return;
+        }
+
+        const users = await res.json();
+        displayUserSearchResults(users);
+    } catch (e) {
+        console.error('Failed to search users:', e);
+        hideUserSearchDropdown();
+    }
+}
+
+function displayUserSearchResults(users) {
+    const dropdown = document.getElementById('user-search-results');
+    const input = document.getElementById('new-chat-username');
+
+    if (users.length === 0) {
+        hideUserSearchDropdown();
+        return;
+    }
+
+    dropdown.innerHTML = '';
+
+    users.forEach(user => {
+        const div = document.createElement('div');
+        div.className = 'dropdown-item';
+        div.textContent = user.username;
+        div.dataset.userId = user.id;
+        div.dataset.username = user.username;
+        div.onclick = () => selectUserFromDropdown(user.id, user.username);
+        dropdown.appendChild(div);
+    });
+
+    dropdown.classList.remove('hidden');
+}
+
+function hideUserSearchDropdown() {
+    const dropdown = document.getElementById('user-search-results');
+    dropdown.classList.add('hidden');
+}
+
+function selectUserFromDropdown(userId, username) {
+    const input = document.getElementById('new-chat-username');
+    input.value = username;
+    input.dataset.selectedUserId = userId;
+    hideUserSearchDropdown();
+}
+
+function handleClickOutsideDropdown(e) {
+    const dropdown = document.getElementById('user-search-results');
+    const input = document.getElementById('new-chat-username');
+
+    if (!dropdown.contains(e.target) && e.target !== input) {
+        hideUserSearchDropdown();
+    }
 }
 
 async function createChatByUsername() {
-    const username = document.getElementById('new-chat-username').value.trim();
+    const input = document.getElementById('new-chat-username');
+    const username = input.value.trim();
     const errorEl = document.getElementById('new-chat-error');
     errorEl.textContent = '';
     
@@ -845,6 +941,15 @@ async function createChatByUsername() {
         return;
     }
     
+    // Check if a user was selected from dropdown
+    const selectedUserId = input.dataset.selectedUserId;
+    if (selectedUserId) {
+        startNewChat(selectedUserId, username);
+        delete input.dataset.selectedUserId;
+        return;
+    }
+    
+    // Otherwise, search by exact username
     try {
         const res = await apiRequest(`/users?username=${encodeURIComponent(username)}`);
         if (res.status === 404) {

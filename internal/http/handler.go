@@ -45,6 +45,7 @@ func (h *Handler) Router() *mux.Router {
 	api.Use(auth.Middleware(h.authService))
 	api.HandleFunc("/me", h.getCurrentUser).Methods("GET")
 	api.HandleFunc("/users", h.listUsers).Methods("GET")
+	api.HandleFunc("/users/search", h.searchUsers).Methods("GET")
 	api.HandleFunc("/users/{id}", h.getUser).Methods("GET")
 	api.HandleFunc("/conversations", h.getConversations).Methods("GET")
 	api.HandleFunc("/chats", h.getChats).Methods("GET")
@@ -221,6 +222,35 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, http.StatusOK, users)
+}
+
+func (h *Handler) searchUsers(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+
+	var users []model.User
+	var err error
+
+	if query == "" {
+		// Return all users if no query
+		users, err = h.userService.GetAll(r.Context())
+	} else {
+		users, err = h.userService.SearchUsers(r.Context(), query)
+	}
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to search users")
+		return
+	}
+
+	// Convert to API response format (without password_hash)
+	apiUsers := make([]map[string]interface{}, len(users))
+	for i, user := range users {
+		apiUsers[i] = map[string]interface{}{
+			"id":       user.ID,
+			"username": user.Username,
+		}
+	}
+
+	respondJSON(w, http.StatusOK, apiUsers)
 }
 
 func (h *Handler) getConversations(w http.ResponseWriter, r *http.Request) {

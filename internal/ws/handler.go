@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,13 +35,15 @@ type Handler struct {
 	hub            *Hub
 	authService    *auth.Service
 	messageService *service.MessageService
+	userService    *service.UserService
 }
 
-func NewHandler(hub *Hub, authSvc *auth.Service, msgSvc *service.MessageService) *Handler {
+func NewHandler(hub *Hub, authSvc *auth.Service, msgSvc *service.MessageService, userSvc *service.UserService) *Handler {
 	return &Handler{
 		hub:            hub,
 		authService:    authSvc,
 		messageService: msgSvc,
+		userService:    userSvc,
 	}
 }
 
@@ -140,6 +143,12 @@ func (c *Client) readPump() {
 		msg.SenderID = c.userID
 		msg.CreatedAt = time.Now()
 
+		// Check for @all broadcast message
+		if strings.HasPrefix(msg.Payload, "@all ") {
+			c.handleBroadcastMessage(msg)
+			continue
+		}
+
 		// Save message to database (convert string to []byte)
 		if c.messageService != nil {
 			ctx := context.Background()
@@ -150,6 +159,55 @@ func (c *Client) readPump() {
 		}
 
 		c.hub.Broadcast(msg)
+	}
+}
+
+// handleBroadcastMessage handles @all messages from admin users
+// Broadcasts the message to all users without saving to database
+func (c *Client) handleBroadcastMessage(msg Message) {
+	// Get sender info to check if admin
+	if c.messageService == nil {
+		return
+	}
+
+	ctx := context.Background()
+	sender, err := c.messageService.GetSenderInfo(ctx, c.userID)
+	if err != nil {
+		log.Printf("failed to get sender info: %v", err)
+		return
+	}
+
+	// Only admin can broadcast
+	if sender.Username != "admin" {
+		log.Printf("non-admin user %s attempted to broadcast", sender.Username)
+		return
+	}
+
+	// Get all users
+	users, err := c.userService.GetAll(ctx)
+	if err != nil {
+		log.Printf("failed to get users for broadcast: %v", err)
+		return
+	}
+
+	// Remove "@all " prefix from payload
+	broadcastPayload := strings.TrimPrefix(msg.Payload, "@all ")
+
+	// Send to all users except sender
+	for _, user := range users {
+		if user.ID == c.userID {
+			continue
+		}
+
+		broadcastMsg := Message{
+			ID:         uuid.New(),
+			SenderID:   c.userID,
+			ReceiverID: user.ID,
+			Payload:    broadcastPayload,
+			CreatedAt:  msg.CreatedAt,
+		}
+
+		c.hub.Broadcast(broadcastMsg)
 	}
 }
 

@@ -81,7 +81,7 @@ func (a *App) Init(ctx context.Context, migrationsFS fs.FS) error {
 	router := httpHandler.Router()
 
 	// Register WebSocket handler BEFORE static file catch-all
-	wsHandler := ws.NewHandler(a.hub, authService, messageService)
+	wsHandler := ws.NewHandler(a.hub, authService, messageService, userService)
 	router.Handle("/ws", wsHandler)
 
 	// Static files handler - must be registered last (catch-all)

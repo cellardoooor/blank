@@ -542,6 +542,51 @@ input::placeholder, textarea::placeholder {
     transform: scale(0.95);
 }
 
+/* ==================== USER SEARCH DROPDOWN ==================== */
+
+.search-container {
+    position: relative;
+}
+
+#user-search-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--white);
+    border: 2px solid var(--black);
+    border-top: none;
+    border-radius: 0 0 var(--border-radius-sm) var(--border-radius-sm);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+#user-search-results.hidden {
+    display: none;
+}
+
+.dropdown-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--gray-200);
+    font-size: 14px;
+    transition: var(--transition);
+}
+
+.dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.dropdown-item:hover {
+    background: var(--gray-100);
+}
+
+.dropdown-item:active {
+    background: var(--gray-200);
+}
+
 /* ==================== MODALS ==================== */
 
 .modal {

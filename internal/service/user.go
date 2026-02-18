@@ -37,3 +37,10 @@ func (s *UserService) GetAll(ctx context.Context) ([]model.User, error) {
 	}
 	return s.repo.GetAll(ctx)
 }
+
+func (s *UserService) SearchUsers(ctx context.Context, prefix string) ([]model.User, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("database unavailable")
+	}
+	return s.repo.SearchUsers(ctx, prefix)
+}

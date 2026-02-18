@@ -137,6 +137,26 @@ func (r *UserRepo) UpdatePassword(ctx context.Context, id uuid.UUID, passwordHas
 	return err
 }
 
+func (r *UserRepo) SearchUsers(ctx context.Context, prefix string) ([]model.User, error) {
+	conn := getConn(ctx, r.pool)
+	sql := `SELECT id, username, password_hash, created_at FROM users WHERE username ILIKE $1 ORDER BY username LIMIT 10`
+	rows, err := conn.Query(ctx, sql, prefix+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []model.User
+	for rows.Next() {
+		var user model.User
+		if err := rows.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, rows.Err()
+}
+
 type MessageRepo struct {
 	pool *pgxpool.Pool
 }
