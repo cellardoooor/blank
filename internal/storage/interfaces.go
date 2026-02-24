@@ -23,6 +23,7 @@ type MessageRepository interface {
 	GetConversationPartners(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 	GetChatList(ctx context.Context, userID uuid.UUID) ([]ChatInfo, error)
 	MarkAsRead(ctx context.Context, userID, partnerID uuid.UUID) error
+	MarkAsDelivered(ctx context.Context, messageID, receiverID uuid.UUID) error
 	GetUnreadCounts(ctx context.Context, userID uuid.UUID) (map[uuid.UUID]int, error)
 }
 

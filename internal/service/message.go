@@ -192,6 +192,13 @@ func (s *MessageService) MarkChatAsRead(ctx context.Context, userID, partnerID u
 	return s.repo.MarkAsRead(ctx, userID, partnerID)
 }
 
+func (s *MessageService) MarkMessageAsDelivered(ctx context.Context, messageID, receiverID uuid.UUID) error {
+	if s.repo == nil {
+		return fmt.Errorf("database unavailable")
+	}
+	return s.repo.MarkAsDelivered(ctx, messageID, receiverID)
+}
+
 func (s *MessageService) GetSenderInfo(ctx context.Context, userID uuid.UUID) (*model.User, error) {
 	if s.userRepo == nil {
 		return nil, fmt.Errorf("database unavailable")

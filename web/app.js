@@ -31,6 +31,14 @@ const MAX_RECONNECT_DELAY = 30000;
 const PING_INTERVAL = 30000;
 const PONG_TIMEOUT = 10000;
 
+// Scroll state management
+let scrollState = {
+    isUserScrolling: false,
+    lastScrollPosition: 0,
+    shouldPreservePosition: false,
+    autoScrollTimeout: null
+};
+
 // Favicon switching for unread messages
 const ORIGINAL_FAVICON = '/favicon.ico';
 const UNREAD_FAVICON = '/unread.ico';
@@ -356,6 +364,11 @@ function handleIncomingMessage(msg) {
         return;
     }
 
+    if (msg.type === 'delivered') {
+        handleDeliveryStatus(msg);
+        return;
+    }
+
     const partnerId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
     const isIncoming = msg.sender_id !== userId;
 
@@ -374,6 +387,77 @@ function handleIncomingMessage(msg) {
         const chat = chats.get(partnerId);
         const senderName = chat ? chat.username : 'User';
         showNotification(senderName, text, partnerId);
+        
+        // Send delivery confirmation
+        sendDeliveryStatus(msg.id);
+    }
+
+    // If this is the active chat, display it (or replace optimistic)
+    if (currentChat === partnerId) {
+        // Try to replace optimistic message first
+        if (msg.sender_id === userId) {
+            const replaced = replaceOptimisticMessage(msg);
+            if (!replaced) {
+                // If no optimistic found, display as new
+                displayMessage(msg, '', 'delivered');
+            }
+        } else {
+            displayMessage(msg, '', '');
+            
+            // Auto-scroll only if user was at bottom
+            if (isUserAtBottom()) {
+                smartScrollToBottom(200);
+            }
+        }
+    } else if (isIncoming) {
+        // Incoming message in non-active chat - update UI
+        updateDocumentTitle();
+        setUnreadFavicon();
+    }
+}
+
+function handleDeliveryStatus(msg) {
+    const selector = `.message.outgoing[data-message-id="${msg.message_id}"]`;
+    document.querySelectorAll(selector).forEach(msgDiv => {
+        if (msgDiv.classList.contains('sending')) {
+            msgDiv.classList.remove('sending');
+            msgDiv.classList.add('delivered');
+        }
+    });
+}
+
+function handleIncomingMessage(msg) {
+    if (msg.type === 'read') {
+        handleReadStatus(msg);
+        return;
+    }
+
+    if (msg.type === 'delivered') {
+        handleDeliveryStatus(msg);
+        return;
+    }
+
+    const partnerId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
+    const isIncoming = msg.sender_id !== userId;
+
+    // Add to messages map
+    if (!messagesMap.has(partnerId)) {
+        messagesMap.set(partnerId, []);
+    }
+    messagesMap.get(partnerId).push(msg);
+
+    // Update chat list (includes unread count increment for non-active chats)
+    updateChatFromMessage(partnerId, msg, isIncoming && currentChat !== partnerId);
+
+    // Show push notification for incoming messages
+    if (isIncoming) {
+        const text = decodePayload(msg.payload);
+        const chat = chats.get(partnerId);
+        const senderName = chat ? chat.username : 'User';
+        showNotification(senderName, text, partnerId);
+        
+        // Send delivery confirmation
+        sendDeliveryStatus(msg.id);
     }
 
     // If this is the active chat, display it (or replace optimistic)
@@ -393,6 +477,16 @@ function handleIncomingMessage(msg) {
         updateDocumentTitle();
         setUnreadFavicon();
     }
+}
+
+function handleDeliveryStatus(msg) {
+    const selector = `.message.outgoing[data-message-id="${msg.message_id}"]`;
+    document.querySelectorAll(selector).forEach(msgDiv => {
+        if (msgDiv.classList.contains('sending')) {
+            msgDiv.classList.remove('sending');
+            msgDiv.classList.add('delivered');
+        }
+    });
 }
 
 function handleReadStatus(msg) {
@@ -593,13 +687,14 @@ async function selectChat(chatUserId) {
     // Reset favicon when opening chat with unread messages
     setOriginalFavicon();
     
-    await loadMessages(chatUserId);
+    await loadMessages(chatUserId, true);
     
     sendReadStatus(chatUserId);
     
-    requestAnimationFrame(() => {
-        requestAnimationFrame(scrollToBottom);
-    });
+    // Auto-scroll to bottom only if user was at bottom
+    if (isUserAtBottom()) {
+        smartScrollToBottom(300);
+    }
     
     document.getElementById('message-input').focus();
 }
@@ -626,6 +721,15 @@ function sendReadStatus(partnerId) {
     }
 }
 
+function sendDeliveryStatus(messageId) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            type: 'delivered',
+            message_id: messageId
+        }));
+    }
+}
+
 async function loadMessages(chatUserId, preserveScroll = false) {
     messagesAbortController?.abort();
     messagesAbortController = new AbortController();
@@ -633,20 +737,10 @@ async function loadMessages(chatUserId, preserveScroll = false) {
     const container = document.getElementById('messages');
     const messagesContainer = document.getElementById('messages-container');
     
-    // Save first visible message ID before clearing
-    let firstVisibleMsgId = null;
-    if (preserveScroll && messagesContainer) {
-        const visibleMessages = container.querySelectorAll('.message');
-        for (const msgEl of visibleMessages) {
-            const rect = msgEl.getBoundingClientRect();
-            const containerRect = messagesContainer.getBoundingClientRect();
-            if (rect.top >= containerRect.top) {
-                firstVisibleMsgId = msgEl.dataset.messageId;
-                break;
-            }
-        }
-    }
+    // Save scroll position before clearing container
+    saveScrollPosition();
     
+    // Clear container
     container.innerHTML = '';
     
     try {
@@ -665,20 +759,26 @@ async function loadMessages(chatUserId, preserveScroll = false) {
         messages.reverse().forEach(msg => {
             const isOutgoing = msg.sender_id === userId;
             if (isOutgoing) {
-                const status = msg.is_read ? 'read' : 'delivered';
+                let status = 'sending';
+                if (msg.is_read) {
+                    status = 'read';
+                } else if (msg.is_delivered) {
+                    status = 'delivered';
+                }
                 displayMessage(msg, '', status);
             } else {
                 displayMessage(msg, '', '');
             }
         });
         
-        // Restore scroll position to the first visible message
-        if (preserveScroll && firstVisibleMsgId) {
-            const targetMsg = container.querySelector(`[data-message-id="${firstVisibleMsgId}"]`);
-            if (targetMsg && messagesContainer) {
-                targetMsg.scrollIntoView({ block: 'start' });
+        // Restore scroll position after messages are rendered
+        requestAnimationFrame(() => {
+            if (preserveScroll) {
+                restoreScrollPosition();
+            } else {
+                smartScrollToBottom(100); // Small delay to ensure DOM is updated
             }
-        }
+        });
         
     } catch (e) {
         if (e.name === 'AbortError') return;
@@ -814,7 +914,10 @@ function sendMessage() {
     
     updateChatFromMessage(currentChat, optimisticMsg);
     
-    queueMicrotask(scrollToBottom);
+    // Auto-scroll to bottom only if user was at bottom
+    if (isUserAtBottom()) {
+        smartScrollToBottom(500); // Longer delay for better UX
+    }
     
     input.focus();
 }
@@ -1149,7 +1252,80 @@ function escapeHtml(text) {
 
 function scrollToBottom() {
     const container = document.getElementById('messages-container');
-    container.scrollTop = container.scrollHeight;
+    if (container) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+function isUserAtBottom() {
+    const container = document.getElementById('messages-container');
+    if (!container) return false;
+    
+    const threshold = 50; // pixels from bottom
+    return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+}
+
+function saveScrollPosition() {
+    const container = document.getElementById('messages-container');
+    if (container) {
+        scrollState.lastScrollPosition = container.scrollTop;
+        scrollState.shouldPreservePosition = !isUserAtBottom();
+    }
+}
+
+function restoreScrollPosition() {
+    const container = document.getElementById('messages-container');
+    if (container && scrollState.shouldPreservePosition) {
+        container.scrollTop = scrollState.lastScrollPosition;
+        scrollState.shouldPreservePosition = false;
+    }
+}
+
+function setupScrollListeners() {
+    const container = document.getElementById('messages-container');
+    if (container) {
+        container.addEventListener('scroll', function() {
+            scrollState.isUserScrolling = true;
+            
+            // Clear auto-scroll timeout if user scrolls manually
+            if (scrollState.autoScrollTimeout) {
+                clearTimeout(scrollState.autoScrollTimeout);
+                scrollState.autoScrollTimeout = null;
+            }
+            
+            // Save scroll position after user stops scrolling
+            clearTimeout(this.scrollTimeout);
+            this.scrollTimeout = setTimeout(() => {
+                scrollState.isUserScrolling = false;
+                saveScrollPosition();
+            }, 100);
+        });
+    }
+}
+
+function smartScrollToBottom(delay = 0) {
+    if (scrollState.isUserScrolling) {
+        // User is scrolling manually, don't interrupt
+        return;
+    }
+    
+    if (delay > 0) {
+        scrollState.autoScrollTimeout = setTimeout(() => {
+            scrollToBottom();
+            scrollState.autoScrollTimeout = null;
+        }, delay);
+    } else {
+        scrollToBottom();
+    }
+}
+
+function resetScrollState() {
+    scrollState = {
+        isUserScrolling: false,
+        lastScrollPosition: 0,
+        shouldPreservePosition: false,
+        autoScrollTimeout: null
+    };
 }
 
 function setupInputResize() {
@@ -1256,37 +1432,45 @@ function setupEventListeners() {
         }
     });
     
-    // Refresh on tab visibility change (debounced)
-    document.addEventListener('visibilitychange', function() {
-        if (document.visibilityState === 'visible' && token) {
-            clearTimeout(refreshDebounceTimer);
-            refreshDebounceTimer = setTimeout(refreshAllData, 500);
+// Refresh on tab visibility change (debounced)
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible' && token) {
+        clearTimeout(refreshDebounceTimer);
+        refreshDebounceTimer = setTimeout(refreshAllData, 500);
 
-            // Reset favicon when tab becomes visible
-            setOriginalFavicon();
+        // Reset favicon when tab becomes visible
+        setOriginalFavicon();
 
-            // Clear unread count for active chat when returning to tab
-            if (currentChat) {
-                const chat = chats.get(currentChat);
-                if (chat && chat.unreadCount > 0) {
-                    chat.unreadCount = 0;
-                    renderChatList();
-                    updateDocumentTitle();
-                    sendReadStatus(currentChat);
-                }
+        // Clear unread count for active chat when returning to tab
+        if (currentChat) {
+            const chat = chats.get(currentChat);
+            if (chat && chat.unreadCount > 0) {
+                chat.unreadCount = 0;
+                renderChatList();
+                updateDocumentTitle();
+                sendReadStatus(currentChat);
             }
         }
-    });
-    
-    // Refresh on page restore from bfcache
-    window.addEventListener('pageshow', function(e) {
-        if (e.persisted && token) {
-            refreshAllData(true); // preserve scroll position
-        }
-    });
-    
-    // Refresh on network reconnect
-    window.addEventListener('online', refreshAllData);
+        
+        // Restore scroll position after refresh
+        requestAnimationFrame(() => {
+            restoreScrollPosition();
+        });
+    }
+});
+
+// Refresh on page restore from bfcache
+window.addEventListener('pageshow', function(e) {
+    if (e.persisted && token) {
+        refreshAllData(true); // preserve scroll position
+    }
+});
+
+// Refresh on network reconnect
+window.addEventListener('online', refreshAllData);
+
+// Setup scroll listeners when DOM is ready
+document.addEventListener('DOMContentLoaded', setupScrollListeners);
 }
 
 // Initialize when DOM is ready

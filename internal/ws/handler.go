@@ -23,13 +23,14 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	hub            *Hub
-	conn           *websocket.Conn
-	send           chan Message
-	sendReadStatus chan ReadStatus
-	userID         uuid.UUID
-	messageService *service.MessageService
-	userService    *service.UserService
+	hub              *Hub
+	conn             *websocket.Conn
+	send             chan Message
+	sendReadStatus  chan ReadStatus
+	sendDeliveryStatus chan DeliveryStatus
+	userID           uuid.UUID
+	messageService   *service.MessageService
+	userService      *service.UserService
 }
 
 type Handler struct {
@@ -67,13 +68,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &Client{
-		hub:            h.hub,
-		conn:           conn,
-		send:           make(chan Message, 256),
-		sendReadStatus: make(chan ReadStatus, 256),
-		userID:         userID,
-		messageService: h.messageService,
-		userService:    h.userService,
+		hub:                h.hub,
+		conn:               conn,
+		send:               make(chan Message, 256),
+		sendReadStatus:     make(chan ReadStatus, 256),
+		sendDeliveryStatus: make(chan DeliveryStatus, 256),
+		userID:             userID,
+		messageService:     h.messageService,
+		userService:        h.userService,
 	}
 
 	h.hub.Register(client)
@@ -124,6 +126,7 @@ func (c *Client) readPump() {
 				ctx := context.Background()
 				if err := c.messageService.MarkChatAsRead(ctx, c.userID, partnerID); err != nil {
 					log.Printf("failed to mark as read: %v", err)
+					go c.retryMarkAsRead(partnerID, 3)
 				}
 			}
 
@@ -132,6 +135,25 @@ func (c *Client) readPump() {
 				ReaderID:  c.userID,
 				PartnerID: partnerID,
 			})
+			continue
+		}
+
+		if msgType, ok := rawMsg["type"].(string); ok && msgType == "delivered" {
+			messageIDStr, ok := rawMsg["message_id"].(string)
+			if !ok {
+				continue
+			}
+			messageID, err := uuid.Parse(messageIDStr)
+			if err != nil {
+				continue
+			}
+
+			if c.messageService != nil {
+				ctx := context.Background()
+				if err := c.messageService.MarkMessageAsDelivered(ctx, messageID, c.userID); err != nil {
+					log.Printf("failed to mark as delivered: %v", err)
+				}
+			}
 			continue
 		}
 
@@ -154,13 +176,44 @@ func (c *Client) readPump() {
 		// Save message to database (convert string to []byte)
 		if c.messageService != nil {
 			ctx := context.Background()
-			_, err := c.messageService.Send(ctx, c.userID, msg.ReceiverID, []byte(msg.Payload))
+			savedMsg, err := c.messageService.Send(ctx, c.userID, msg.ReceiverID, []byte(msg.Payload))
 			if err != nil {
 				log.Printf("failed to save message: %v", err)
+				continue
 			}
+			msg.ID = savedMsg.ID
 		}
 
+		// Send delivery confirmation to sender
+		c.hub.SendDeliveryStatus(DeliveryStatus{
+			Type:       "delivered",
+			MessageID:  msg.ID,
+			SenderID:   c.userID,
+			ReceiverID: msg.ReceiverID,
+		})
+
 		c.hub.Broadcast(msg)
+	}
+}
+
+func (c *Client) retryMarkAsRead(partnerID uuid.UUID, maxRetries int) {
+	for i := 0; i < maxRetries; i++ {
+		time.Sleep(time.Duration(i+1) * 500 * time.Millisecond)
+		
+		if c.messageService != nil {
+			ctx := context.Background()
+			if err := c.messageService.MarkChatAsRead(ctx, c.userID, partnerID); err != nil {
+				log.Printf("retry %d failed to mark as read: %v", i+1, err)
+				continue
+			}
+			
+			c.hub.SendReadStatus(ReadStatus{
+				Type:      "read",
+				ReaderID:  c.userID,
+				PartnerID: partnerID,
+			})
+			return
+		}
 	}
 }
 
@@ -254,6 +307,18 @@ func (c *Client) writePump() {
 			}
 
 		case status := <-c.sendReadStatus:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+			data, err := json.Marshal(status)
+			if err != nil {
+				continue
+			}
+
+			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+
+		case status := <-c.sendDeliveryStatus:
 			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 
 			data, err := json.Marshal(status)

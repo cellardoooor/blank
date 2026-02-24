@@ -23,5 +23,6 @@ type Message struct {
 
 type MessageWithRead struct {
 	Message
-	IsRead bool `json:"is_read"`
+	IsRead      bool `json:"is_read"`
+	IsDelivered bool `json:"is_delivered"`
 }

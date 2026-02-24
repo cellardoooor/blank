@@ -197,10 +197,19 @@ func (r *MessageRepo) GetByUserPairWithReadStatus(ctx context.Context, currentUs
 			CASE 
 				WHEN m.sender_id = $2 THEN 
 					COALESCE(cr.last_read_at >= m.created_at, false)
-				ELSE false
-			END as is_read
+				ELSE 
+					COALESCE(cr2.last_read_at >= m.created_at, false)
+			END as is_read,
+			CASE 
+				WHEN m.sender_id = $2 THEN 
+					COALESCE(md.delivered_at IS NOT NULL, false)
+				ELSE 
+					true
+			END as is_delivered
 		FROM messages m
 		LEFT JOIN chat_reads cr ON cr.user_id = m.receiver_id AND cr.partner_id = m.sender_id
+		LEFT JOIN chat_reads cr2 ON cr2.user_id = $2 AND cr2.partner_id = m.sender_id
+		LEFT JOIN message_deliveries md ON md.message_id = m.id AND md.receiver_id = m.receiver_id
 		WHERE (m.sender_id = $2 AND m.receiver_id = $1) OR (m.sender_id = $1 AND m.receiver_id = $2)
 		ORDER BY m.created_at DESC LIMIT $3 OFFSET $4`
 	rows, err := conn.Query(ctx, sql, partnerID, currentUser, limit, offset)
@@ -212,7 +221,7 @@ func (r *MessageRepo) GetByUserPairWithReadStatus(ctx context.Context, currentUs
 	messages := []model.MessageWithRead{}
 	for rows.Next() {
 		var msg model.MessageWithRead
-		if err := rows.Scan(&msg.ID, &msg.SenderID, &msg.ReceiverID, &msg.Payload, &msg.CreatedAt, &msg.IsRead); err != nil {
+		if err := rows.Scan(&msg.ID, &msg.SenderID, &msg.ReceiverID, &msg.Payload, &msg.CreatedAt, &msg.IsRead, &msg.IsDelivered); err != nil {
 			return nil, err
 		}
 		messages = append(messages, msg)
@@ -301,6 +310,17 @@ func (r *MessageRepo) MarkAsRead(ctx context.Context, userID, partnerID uuid.UUI
 		ON CONFLICT (user_id, partner_id) 
 		DO UPDATE SET last_read_at = NOW()`
 	_, err := conn.Exec(ctx, sql, userID, partnerID)
+	return err
+}
+
+func (r *MessageRepo) MarkAsDelivered(ctx context.Context, messageID, receiverID uuid.UUID) error {
+	conn := getConn(ctx, r.pool)
+	sql := `
+		INSERT INTO message_deliveries (message_id, receiver_id, delivered_at) 
+		VALUES ($1, $2, NOW()) 
+		ON CONFLICT (message_id, receiver_id) 
+		DO NOTHING`
+	_, err := conn.Exec(ctx, sql, messageID, receiverID)
 	return err
 }
 
