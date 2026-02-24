@@ -691,10 +691,8 @@ async function selectChat(chatUserId) {
     
     sendReadStatus(chatUserId);
     
-    // Auto-scroll to bottom only if user was at bottom
-    if (isUserAtBottom()) {
-        smartScrollToBottom(300);
-    }
+    // Auto-scroll to bottom
+    smartScrollToBottom(300);
     
     document.getElementById('message-input').focus();
 }
@@ -914,10 +912,8 @@ function sendMessage() {
     
     updateChatFromMessage(currentChat, optimisticMsg);
     
-    // Auto-scroll to bottom only if user was at bottom
-    if (isUserAtBottom()) {
-        smartScrollToBottom(500); // Longer delay for better UX
-    }
+    // Auto-scroll to bottom
+    smartScrollToBottom(500);
     
     input.focus();
 }
