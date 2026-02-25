@@ -824,3 +824,23 @@ input::placeholder, textarea::placeholder {
         transform: translateY(0);
     }
 }
+
+/* ==================== TYPING PREVIEW ==================== */
+
+.typing-preview {
+    align-self: flex-start;
+    max-width: 70%;
+    margin-bottom: 8px;
+    padding: 10px 14px;
+    border-radius: var(--border-radius-lg);
+    border: 1px dashed rgba(200, 200, 200, 0.7);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.typing-preview-text {
+    font-size: 16px;
+    line-height: 1.5;
+    color: rgba(200, 200, 200, 0.8);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}

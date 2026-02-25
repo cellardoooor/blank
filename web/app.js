@@ -31,6 +31,13 @@ const MAX_RECONNECT_DELAY = 30000;
 const PING_INTERVAL = 30000;
 const PONG_TIMEOUT = 10000;
 
+// Typing status variables
+let typingDebounceTimer = null;
+let typingHideTimer = null;
+let currentTypingPreview = null;
+const TYPING_DEBOUNCE = 500;
+const TYPING_HIDE_DELAY = 2000;
+
 // Scroll state management
 let scrollState = {
     isUserScrolling: false,
@@ -369,6 +376,11 @@ function handleIncomingMessage(msg) {
         return;
     }
 
+    if (msg.type === 'typing') {
+        handleTypingStatus(msg);
+        return;
+    }
+
     const partnerId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
     const isIncoming = msg.sender_id !== userId;
 
@@ -416,66 +428,49 @@ function handleIncomingMessage(msg) {
     }
 }
 
-function handleDeliveryStatus(msg) {
-    const selector = `.message.outgoing[data-message-id="${msg.message_id}"]`;
-    document.querySelectorAll(selector).forEach(msgDiv => {
-        if (msgDiv.classList.contains('sending')) {
-            msgDiv.classList.remove('sending');
-            msgDiv.classList.add('delivered');
-        }
-    });
+function handleTypingStatus(msg) {
+    if (!currentChat || currentChat !== msg.sender_id) {
+        return;
+    }
+
+    clearTimeout(typingHideTimer);
+
+    if (currentTypingPreview) {
+        updateTypingPreview(msg.text);
+    } else {
+        showTypingPreview(msg.text);
+    }
+
+    typingHideTimer = setTimeout(() => {
+        hideTypingPreview();
+    }, TYPING_HIDE_DELAY);
 }
 
-function handleIncomingMessage(msg) {
-    if (msg.type === 'read') {
-        handleReadStatus(msg);
-        return;
+function showTypingPreview(text) {
+    const container = document.getElementById('messages');
+    if (!container) return;
+
+    currentTypingPreview = document.createElement('div');
+    currentTypingPreview.className = 'typing-preview';
+    currentTypingPreview.innerHTML = `<div class="typing-preview-text">${escapeHtml(text)}</div>`;
+    
+    container.appendChild(currentTypingPreview);
+    smartScrollToBottom(100);
+}
+
+function updateTypingPreview(text) {
+    if (!currentTypingPreview) return;
+    
+    const textEl = currentTypingPreview.querySelector('.typing-preview-text');
+    if (textEl) {
+        textEl.textContent = text;
     }
+}
 
-    if (msg.type === 'delivered') {
-        handleDeliveryStatus(msg);
-        return;
-    }
-
-    const partnerId = msg.sender_id === userId ? msg.receiver_id : msg.sender_id;
-    const isIncoming = msg.sender_id !== userId;
-
-    // Add to messages map
-    if (!messagesMap.has(partnerId)) {
-        messagesMap.set(partnerId, []);
-    }
-    messagesMap.get(partnerId).push(msg);
-
-    // Update chat list (includes unread count increment for non-active chats)
-    updateChatFromMessage(partnerId, msg, isIncoming && currentChat !== partnerId);
-
-    // Show push notification for incoming messages
-    if (isIncoming) {
-        const text = decodePayload(msg.payload);
-        const chat = chats.get(partnerId);
-        const senderName = chat ? chat.username : 'User';
-        showNotification(senderName, text, partnerId);
-        
-        // Send delivery confirmation
-        sendDeliveryStatus(msg.id);
-    }
-
-    // If this is the active chat, display it (or replace optimistic)
-    if (currentChat === partnerId) {
-        // Try to replace optimistic message first
-        if (msg.sender_id === userId) {
-            const replaced = replaceOptimisticMessage(msg);
-            if (!replaced) {
-                // If no optimistic found, display as new
-                displayMessage(msg, '', 'delivered');
-            }
-        } else {
-            displayMessage(msg, '', '');
-        }
-    } else if (isIncoming) {
-        // Incoming message in non-active chat - update UI
-        updateDocumentTitle();
-        setUnreadFavicon();
+function hideTypingPreview() {
+    if (currentTypingPreview && currentTypingPreview.parentNode) {
+        currentTypingPreview.remove();
+        currentTypingPreview = null;
     }
 }
 
@@ -663,6 +658,9 @@ function renderChatList() {
 }
 
 async function selectChat(chatUserId) {
+    hideTypingPreview();
+    clearTimeout(typingDebounceTimer);
+    
     currentChat = chatUserId;
     const chat = chats.get(chatUserId);
     
@@ -698,6 +696,9 @@ async function selectChat(chatUserId) {
 }
 
 function goToSidebar() {
+    hideTypingPreview();
+    clearTimeout(typingDebounceTimer);
+    
     viewMode = 'sidebar';
     currentChat = null;
     
@@ -899,6 +900,10 @@ function sendMessage() {
     
     input.value = '';
     input.style.height = 'auto';
+    
+    hideTypingPreview();
+    clearTimeout(typingDebounceTimer);
+    sendTypingStopped();
     
     const optimisticMsg = {
         id: 'temp-' + Date.now(),
@@ -1330,6 +1335,10 @@ function setupInputResize() {
     input.addEventListener('input', function() {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        
+        if (currentChat) {
+            handleTypingInput(this.value);
+        }
     });
     
     input.addEventListener('keydown', function(e) {
@@ -1339,6 +1348,38 @@ function setupInputResize() {
             sendMessage();
         }
     });
+}
+
+function handleTypingInput(text) {
+    clearTimeout(typingDebounceTimer);
+    
+    if (text.trim()) {
+        typingDebounceTimer = setTimeout(() => {
+            sendTypingStatus(text);
+        }, TYPING_DEBOUNCE);
+    } else {
+        sendTypingStopped();
+    }
+}
+
+function sendTypingStatus(text) {
+    if (!ws || ws.readyState !== WebSocket.OPEN || !currentChat) return;
+    
+    ws.send(JSON.stringify({
+        type: 'typing',
+        receiver_id: currentChat,
+        text: text
+    }));
+}
+
+function sendTypingStopped() {
+    if (!ws || ws.readyState !== WebSocket.OPEN || !currentChat) return;
+    
+    ws.send(JSON.stringify({
+        type: 'typing',
+        receiver_id: currentChat,
+        text: ''
+    }));
 }
 
 // Setup all event listeners when DOM is ready

@@ -8,10 +8,11 @@ import (
 )
 
 type Hub struct {
-	clients       map[uuid.UUID]*Client
-	broadcast     chan Message
+	clients        map[uuid.UUID]*Client
+	broadcast      chan Message
 	readStatus    chan ReadStatus
 	deliveryStatus chan DeliveryStatus
+	typingStatus   chan TypingStatus
 	register      chan *Client
 	unregister    chan *Client
 	mu            sync.RWMutex
@@ -38,14 +39,22 @@ type DeliveryStatus struct {
 	ReceiverID uuid.UUID `json:"receiver_id"`
 }
 
+type TypingStatus struct {
+	Type      string    `json:"type"`
+	SenderID  uuid.UUID `json:"sender_id"`
+	ReceiverID uuid.UUID `json:"receiver_id"`
+	Text      string    `json:"text"`
+}
+
 func NewHub() *Hub {
 	return &Hub{
-		clients:        make(map[uuid.UUID]*Client),
-		broadcast:      make(chan Message, 256),
-		readStatus:     make(chan ReadStatus, 256),
-		deliveryStatus: make(chan DeliveryStatus, 256),
-		register:       make(chan *Client),
-		unregister:     make(chan *Client),
+		clients:         make(map[uuid.UUID]*Client),
+		broadcast:       make(chan Message, 256),
+		readStatus:      make(chan ReadStatus, 256),
+		deliveryStatus:  make(chan DeliveryStatus, 256),
+		typingStatus:    make(chan TypingStatus, 256),
+		register:        make(chan *Client),
+		unregister:      make(chan *Client),
 	}
 }
 
@@ -118,6 +127,18 @@ func (h *Hub) Run() {
 				default:
 				}
 			}
+
+		case typing := <-h.typingStatus:
+			h.mu.RLock()
+			receiver, receiverOK := h.clients[typing.ReceiverID]
+			h.mu.RUnlock()
+
+			if receiverOK {
+				select {
+				case receiver.sendTypingStatus <- typing:
+				default:
+				}
+			}
 		}
 	}
 }
@@ -139,6 +160,13 @@ func (h *Hub) SendReadStatus(status ReadStatus) {
 func (h *Hub) SendDeliveryStatus(status DeliveryStatus) {
 	select {
 	case h.deliveryStatus <- status:
+	case <-time.After(time.Second):
+	}
+}
+
+func (h *Hub) SendTypingStatus(status TypingStatus) {
+	select {
+	case h.typingStatus <- status:
 	case <-time.After(time.Second):
 	}
 }

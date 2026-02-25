@@ -23,14 +23,15 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	hub              *Hub
-	conn             *websocket.Conn
-	send             chan Message
-	sendReadStatus  chan ReadStatus
+	hub                *Hub
+	conn               *websocket.Conn
+	send               chan Message
+	sendReadStatus     chan ReadStatus
 	sendDeliveryStatus chan DeliveryStatus
-	userID           uuid.UUID
-	messageService   *service.MessageService
-	userService      *service.UserService
+	sendTypingStatus   chan TypingStatus
+	userID             uuid.UUID
+	messageService     *service.MessageService
+	userService        *service.UserService
 }
 
 type Handler struct {
@@ -73,6 +74,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		send:               make(chan Message, 256),
 		sendReadStatus:     make(chan ReadStatus, 256),
 		sendDeliveryStatus: make(chan DeliveryStatus, 256),
+		sendTypingStatus:   make(chan TypingStatus, 256),
 		userID:             userID,
 		messageService:     h.messageService,
 		userService:        h.userService,
@@ -154,6 +156,27 @@ func (c *Client) readPump() {
 					log.Printf("failed to mark as delivered: %v", err)
 				}
 			}
+			continue
+		}
+
+		if msgType, ok := rawMsg["type"].(string); ok && msgType == "typing" {
+			receiverIDStr, ok := rawMsg["receiver_id"].(string)
+			if !ok {
+				continue
+			}
+			receiverID, err := uuid.Parse(receiverIDStr)
+			if err != nil {
+				continue
+			}
+
+			text, _ := rawMsg["text"].(string)
+
+			c.hub.SendTypingStatus(TypingStatus{
+				Type:       "typing",
+				SenderID:   c.userID,
+				ReceiverID: receiverID,
+				Text:       text,
+			})
 			continue
 		}
 
@@ -322,6 +345,18 @@ func (c *Client) writePump() {
 			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 
 			data, err := json.Marshal(status)
+			if err != nil {
+				continue
+			}
+
+			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+
+		case typing := <-c.sendTypingStatus:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+			data, err := json.Marshal(typing)
 			if err != nil {
 				continue
 			}
