@@ -420,6 +420,9 @@ function handleIncomingMessage(msg) {
             if (isUserAtBottom()) {
                 smartScrollToBottom(200);
             }
+
+            // Send read status for incoming message in active chat
+            sendReadStatus(partnerId);
         }
     } else if (isIncoming) {
         // Incoming message in non-active chat - update UI
