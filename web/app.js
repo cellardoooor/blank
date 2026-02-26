@@ -689,12 +689,9 @@ async function selectChat(chatUserId) {
     // Reset favicon when opening chat with unread messages
     setOriginalFavicon();
     
-    await loadMessages(chatUserId, true);
+    await loadMessages(chatUserId, false);
     
     sendReadStatus(chatUserId);
-    
-    // Auto-scroll to bottom
-    smartScrollToBottom(300);
     
     document.getElementById('message-input').focus();
 }
