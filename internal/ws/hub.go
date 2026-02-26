@@ -10,12 +10,12 @@ import (
 type Hub struct {
 	clients        map[uuid.UUID]*Client
 	broadcast      chan Message
-	readStatus    chan ReadStatus
+	readStatus     chan ReadStatus
 	deliveryStatus chan DeliveryStatus
 	typingStatus   chan TypingStatus
-	register      chan *Client
-	unregister    chan *Client
-	mu            sync.RWMutex
+	register       chan *Client
+	unregister     chan *Client
+	mu             sync.RWMutex
 }
 
 type Message struct {
@@ -40,21 +40,21 @@ type DeliveryStatus struct {
 }
 
 type TypingStatus struct {
-	Type      string    `json:"type"`
-	SenderID  uuid.UUID `json:"sender_id"`
+	Type       string    `json:"type"`
+	SenderID   uuid.UUID `json:"sender_id"`
 	ReceiverID uuid.UUID `json:"receiver_id"`
-	Text      string    `json:"text"`
+	Text       string    `json:"text"`
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		clients:         make(map[uuid.UUID]*Client),
-		broadcast:       make(chan Message, 256),
-		readStatus:      make(chan ReadStatus, 256),
-		deliveryStatus:  make(chan DeliveryStatus, 256),
-		typingStatus:    make(chan TypingStatus, 256),
-		register:        make(chan *Client),
-		unregister:      make(chan *Client),
+		clients:        make(map[uuid.UUID]*Client),
+		broadcast:      make(chan Message, 256),
+		readStatus:     make(chan ReadStatus, 256),
+		deliveryStatus: make(chan DeliveryStatus, 256),
+		typingStatus:   make(chan TypingStatus, 256),
+		register:       make(chan *Client),
+		unregister:     make(chan *Client),
 	}
 }
 
@@ -107,11 +107,19 @@ func (h *Hub) Run() {
 		case status := <-h.readStatus:
 			h.mu.RLock()
 			partner, ok := h.clients[status.PartnerID]
+			sender, senderOk := h.clients[status.ReaderID]
 			h.mu.RUnlock()
 
 			if ok {
 				select {
 				case partner.sendReadStatus <- status:
+				default:
+				}
+			}
+
+			if senderOk && status.ReaderID != status.PartnerID {
+				select {
+				case sender.sendReadStatus <- status:
 				default:
 				}
 			}
