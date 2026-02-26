@@ -1309,7 +1309,7 @@ function setupScrollListeners() {
 }
 
 function smartScrollToBottom(delay = 0, force = false) {
-    if (force || !scrollState.isUserScrolling) {
+    if (!force && scrollState.isUserScrolling) {
         // User is scrolling manually, don't interrupt
         return;
     }
