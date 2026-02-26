@@ -743,6 +743,11 @@ async function loadMessages(chatUserId, preserveScroll = false) {
     // Clear container
     container.innerHTML = '';
     
+    // Scroll to bottom immediately when clearing (before messages load)
+    if (!preserveScroll) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
     try {
         const res = await apiRequest(`/messages/${chatUserId}`, {
             signal: messagesAbortController.signal
