@@ -537,7 +537,8 @@ async function loadChats() {
     }
 }
 
-async function refreshAllData(preserveScroll = true) {
+async function refreshAllData(options = {}) {
+    const { preserveScroll = true } = options;
     if (!token) return;
     
     const now = Date.now();
@@ -775,7 +776,7 @@ async function loadMessages(chatUserId, preserveScroll = false) {
             if (preserveScroll) {
                 restoreScrollPosition();
             } else {
-                smartScrollToBottom(100); // Small delay to ensure DOM is updated
+                smartScrollToBottom(100, true); // Small delay to ensure DOM is updated
             }
         });
         
@@ -1304,8 +1305,8 @@ function setupScrollListeners() {
     }
 }
 
-function smartScrollToBottom(delay = 0) {
-    if (scrollState.isUserScrolling) {
+function smartScrollToBottom(delay = 0, force = false) {
+    if (force || !scrollState.isUserScrolling) {
         // User is scrolling manually, don't interrupt
         return;
     }
@@ -1473,7 +1474,9 @@ function setupEventListeners() {
 document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible' && token) {
         clearTimeout(refreshDebounceTimer);
-        refreshDebounceTimer = setTimeout(refreshAllData, 500);
+        refreshDebounceTimer = setTimeout(() => {
+            refreshAllData({ preserveScroll: false });
+        }, 500);
 
         // Reset favicon when tab becomes visible
         setOriginalFavicon();
@@ -1488,11 +1491,6 @@ document.addEventListener('visibilitychange', function() {
                 sendReadStatus(currentChat);
             }
         }
-        
-        // Restore scroll position after refresh
-        requestAnimationFrame(() => {
-            restoreScrollPosition();
-        });
     }
 });
 
