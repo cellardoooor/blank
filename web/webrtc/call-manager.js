@@ -19,13 +19,17 @@ class CallManager {
     if (this.iceConfig) return this.iceConfig;
     
     try {
+      console.log('Fetching ICE config from /api/calls/ice-config');
       const response = await apiRequest('/api/calls/ice-config');
       console.log('ICE config response:', response);
+      console.log('ICE config response status:', response.status);
+      console.log('ICE config response headers:', [...response.headers.entries()]);
       if (response.ok) {
         this.iceConfig = await response.json();
         console.log('ICE config:', this.iceConfig);
       } else {
-        console.error('ICE config request failed:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('ICE config request failed:', response.status, response.statusText, errorText);
       }
     } catch (err) {
       console.error('Failed to fetch ICE config:', err);
