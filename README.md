@@ -219,6 +219,23 @@ Two separate workflows:
 | `DB_NAME` | Database name | required |
 | `DEFAULT_USER` | Default admin username | optional |
 | `DEFAULT_PASSWORD` | Default admin password | optional |
+| `ICE_SERVERS` | WebRTC ICE servers (JSON) | STUN only (no TURN) |
+
+### ICE Servers Configuration
+
+For WebRTC calls to work through NAT/VPN, configure TURN servers:
+
+**Cloudflare Calls (Free, No Signup Required):**
+```bash
+# Add to .env
+ICE_SERVERS=[{"urls":"stun:stun.cloudflare.com:3478"}]
+```
+
+**Custom TURN Server:**
+```bash
+# Example with coturn
+ICE_SERVERS=[{"urls":"stun:stun.l.google.com:19302"},{"urls":"turn:your-turn-server.com:3478","username":"user","credential":"pass"}]
+```
 
 ### Application (Dev - additional)
 
@@ -261,6 +278,7 @@ yc iam create-token
 - **Stable WebSocket**: Keep-alive with ping/pong (30s interval) and smart reconnection (exponential backoff)
 - **Unread Notifications**: Tab title shows unread message count, updates in real-time
 - **Push Notifications**: Browser notifications for new messages when tab is not active
+- **WebRTC Calls**: Audio/Video calls with P2P connection (STUN/TURN via Cloudflare Calls)
 
 ## Cost
 
