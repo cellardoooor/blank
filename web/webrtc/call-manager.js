@@ -338,7 +338,8 @@ class CallManager {
 
     // Set remote description from offer
     try {
-      console.log('Setting remote description with offer:', { type: 'offer', sdp: sdp.substring(0, 100) + '...' });
+      console.log('Setting remote description with offer:', { type: 'offer', sdp: typeof sdp === 'string' ? sdp.substring(0, 100) + '...' : sdp });
+      console.log('SDP type:', typeof sdp, 'SDP value:', sdp);
       await pc.setRemoteDescription({ type: 'offer', sdp: sdp });
       console.log('Remote description set successfully, connection state:', pc.connection.connectionState);
     } catch (err) {

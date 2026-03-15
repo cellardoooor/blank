@@ -89,8 +89,10 @@ class PeerConnection {
     if (!this.connection) {
       await this.createPeerConnection();
     }
+    console.log('setRemoteDescription called with:', sdp);
     try {
       await this.connection.setRemoteDescription(sdp);
+      console.log('setRemoteDescription succeeded, connection state:', this.connection.connectionState);
     } catch (err) {
       console.error('Failed to set remote description:', err);
       throw err;
