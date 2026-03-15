@@ -1633,9 +1633,19 @@ async function startVideoCall() {
 function showCallModal(participantId, callType) {
     const modal = document.getElementById('call-modal');
     const participantName = chats.get(participantId)?.username || 'User';
+    const videoContainer = document.getElementById('video-container');
     
     document.getElementById('call-header-title').textContent = callType === 'video' ? 'Video Call' : 'Audio Call';
     document.getElementById('call-participant-name').textContent = participantName;
+    
+    // Show video container only for video calls
+    if (videoContainer) {
+        if (callType === 'video') {
+            videoContainer.classList.add('active');
+        } else {
+            videoContainer.classList.remove('active');
+        }
+    }
     
     modal.classList.add('active');
     document.getElementById('active-chat').classList.add('hidden');

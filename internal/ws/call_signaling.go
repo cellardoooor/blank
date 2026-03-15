@@ -42,6 +42,12 @@ func (cs *CallSignaling) HandleCallStart(client *Client, data []byte) {
 		return
 	}
 
+	// Check if call service is available
+	if cs.callService == nil {
+		log.Printf("call service not available, cannot start call")
+		return
+	}
+
 	// Validate participants
 	participantIDs := make([]uuid.UUID, 0, len(msg.Participants))
 	for _, pid := range msg.Participants {
