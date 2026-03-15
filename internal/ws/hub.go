@@ -293,29 +293,31 @@ func (h *Hub) SendToParticipantsExcluding(userIDs []uuid.UUID, excludeUserID uui
 
 // sendToClientChan sends a message to a client's channel based on message type
 // Uses a helper function to reduce repetitive non-blocking send pattern
+// Returns true if message was sent, false if channel was full (message dropped)
 // WARNING: Unknown message types are logged and dropped - ensure all message types are registered
-func (h *Hub) sendToClientChan(client *Client, msg interface{}) {
+func (h *Hub) sendToClientChan(client *Client, msg interface{}) bool {
 	switch m := msg.(type) {
 	case CallStart:
-		trySend(client.sendCallStart, m)
+		return trySend(client.sendCallStart, m)
 	case CallOffer:
-		trySend(client.sendCallOffer, m)
+		return trySend(client.sendCallOffer, m)
 	case CallAnswer:
-		trySend(client.sendCallAnswer, m)
+		return trySend(client.sendCallAnswer, m)
 	case CallIceCandidate:
-		trySend(client.sendCallIceCandidate, m)
+		return trySend(client.sendCallIceCandidate, m)
 	case CallJoin:
-		trySend(client.sendCallJoin, m)
+		return trySend(client.sendCallJoin, m)
 	case CallLeave:
-		trySend(client.sendCallLeave, m)
+		return trySend(client.sendCallLeave, m)
 	case CallEnd:
-		trySend(client.sendCallEnd, m)
+		return trySend(client.sendCallEnd, m)
 	case CallReject:
-		trySend(client.sendCallReject, m)
+		return trySend(client.sendCallReject, m)
 	default:
 		// This indicates a programming error - a new message type was added
 		// without updating this switch statement. The message is dropped.
 		log.Printf("WARNING: unknown message type in sendToClientChan: %T - message dropped for user %s", msg, client.userID)
+		return false
 	}
 }
 
