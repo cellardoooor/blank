@@ -46,6 +46,9 @@ func (h *Handler) Router() *mux.Router {
 	r.HandleFunc("/api/auth/login", h.login).Methods("POST", "OPTIONS")
 	r.HandleFunc("/api/auth/change-password", h.authMiddleware(h.changePassword)).Methods("POST", "OPTIONS")
 
+	// ICE config endpoint - accessible without authentication
+	r.HandleFunc("/api/calls/ice-config", h.getICEConfig).Methods("GET")
+
 	api := r.PathPrefix("/api").Subrouter()
 	api.Use(auth.Middleware(h.authService))
 	api.HandleFunc("/me", h.getCurrentUser).Methods("GET")
@@ -64,7 +67,6 @@ func (h *Handler) Router() *mux.Router {
 	api.HandleFunc("/calls/{id}/leave", h.leaveCall).Methods("POST")
 	api.HandleFunc("/calls/{id}/end", h.endCall).Methods("POST")
 	api.HandleFunc("/calls/history", h.getCallHistory).Methods("GET")
-	api.HandleFunc("/calls/ice-config", h.getICEConfig).Methods("GET")
 
 	return r
 }
