@@ -128,6 +128,11 @@
                 <button onclick="endCall()" class="btn-secondary" id="end-call-btn">End</button>
             </div>
             <div class="modal-body call-modal-body">
+                <!-- Video containers -->
+                <div id="video-container">
+                    <video id="local-video" autoplay muted playsinline></video>
+                    <video id="remote-video" autoplay playsinline></video>
+                </div>
                 <div id="call-participant-info">
                     <div id="call-participant-avatar"></div>
                     <div id="call-participant-name"></div>

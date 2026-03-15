@@ -1572,6 +1572,12 @@ async function startAudioCall() {
         // Get local stream FIRST before creating call
         const stream = await mediaUtils.getLocalStream('audio');
         
+        // Attach local stream to video element
+        const localVideo = document.getElementById('local-video');
+        if (localVideo && stream) {
+            localVideo.srcObject = stream;
+        }
+        
         // Start call with the acquired stream
         const call = await callManager.startCall([currentChat], 'audio', stream);
         activeCall = call;
@@ -1600,6 +1606,12 @@ async function startVideoCall() {
         
         // Get local stream FIRST before creating call
         const stream = await mediaUtils.getLocalStream('video');
+        
+        // Attach local stream to video element
+        const localVideo = document.getElementById('local-video');
+        if (localVideo && stream) {
+            localVideo.srcObject = stream;
+        }
         
         // Start call with the acquired stream
         const call = await callManager.startCall([currentChat], 'video', stream);
@@ -1680,6 +1692,12 @@ async function acceptCall() {
         // Get local stream BEFORE joining the call
         // This ensures we have media available when the offer arrives
         const stream = await mediaUtils.getLocalStream(incomingCall.callType);
+        
+        // Attach local stream to video element
+        const localVideo = document.getElementById('local-video');
+        if (localVideo && stream) {
+            localVideo.srcObject = stream;
+        }
         
         // Join the call
         await callManager.joinCall(incomingCall.callId);
@@ -1856,9 +1874,13 @@ function setupCallEventListeners() {
     
     // Listen for remote streams
     window.addEventListener('remoteStream', (e) => {
-        const videoEl = document.getElementById('remote-video-' + e.detail.userId);
+        console.log('Remote stream received:', e.detail);
+        const videoEl = document.getElementById('remote-video');
         if (videoEl) {
             videoEl.srcObject = e.detail.stream;
+            console.log('Remote video element updated');
+        } else {
+            console.error('Remote video element not found');
         }
     });
     
