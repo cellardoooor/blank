@@ -80,6 +80,7 @@ class PeerConnection {
       await this.createPeerConnection();
     }
 
+    console.log('createAnswer called, connection state:', this.connection.connectionState);
     const answer = await this.connection.createAnswer();
     await this.connection.setLocalDescription(answer);
     return answer;
