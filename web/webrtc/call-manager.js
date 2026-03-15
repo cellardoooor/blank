@@ -338,7 +338,9 @@ class CallManager {
 
     // Set remote description from offer
     try {
+      console.log('Setting remote description with offer:', { type: 'offer', sdp: sdp.substring(0, 100) + '...' });
       await pc.setRemoteDescription({ type: 'offer', sdp: sdp });
+      console.log('Remote description set successfully, connection state:', pc.connection.connectionState);
     } catch (err) {
       console.error('Failed to set remote description in handleOffer:', err);
       // Notify user about the error
@@ -370,7 +372,9 @@ class CallManager {
     };
 
     // Create answer
+    console.log('Creating answer, connection state:', pc.connection.connectionState);
     const answer = await pc.createAnswer();
+    console.log('Answer created:', answer);
 
     // Set local description (MUST await - ICE candidates are generated after this)
     // This is critical: ICE candidates are only generated after setLocalDescription completes
