@@ -31,6 +31,9 @@ services:
       DB_SSLMODE: disable
       DEFAULT_USER: admin
       DEFAULT_PASSWORD: admin123
+      # ICE Servers for WebRTC - includes public TURN server for NAT traversal
+      # OpenRelay provides free TURN service (10GB/month)
+      ICE_SERVERS: '[{"urls":"stun:stun.l.google.com:19302"},{"urls":"turn:openrelay.metered.ca:80","username":"openrelayproject","credential":"openrelayproject"},{"urls":"turn:openrelay.metered.ca:443","username":"openrelayproject","credential":"openrelayproject"},{"urls":"turn:openrelay.metered.ca:443?transport=tcp","username":"openrelayproject","credential":"openrelayproject"}]'
     ports:
       - "8080:8080"
     depends_on:

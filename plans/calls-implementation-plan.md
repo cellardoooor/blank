@@ -259,18 +259,34 @@ class CallManager {
 
 ### Required for NAT Traversal
 
+**IMPORTANT**: TURN server is required for reliable calls between users behind NAT.
+
+### Current Configuration (with public TURN)
+
 ```javascript
 const iceServers = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
   ]
 };
 ```
 
+### ICE Candidate Types
+
+| Type | Description | Quality |
+|------|-------------|---------|
+| `host` | Direct local connection | Best |
+| `srflx` | Via STUN (public IP) | Good |
+| `relay` | Via TURN server | Acceptable |
+
 ### For Production
 - Use public STUN servers (Google/Cloudflare)
-- Add TURN server (coturn) for complex NAT scenarios
+- **TURN server is required** for ~30-40% of connections
+- Free public TURN: OpenRelay (10GB/month)
+- Self-hosted: coturn (recommended for production)
 
 ---
 

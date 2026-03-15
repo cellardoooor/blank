@@ -109,6 +109,7 @@ jobs:
           TF_VAR_min_instances: ${{ vars.MIN_INSTANCES }}
           TF_VAR_max_instances: ${{ vars.MAX_INSTANCES }}
           TF_VAR_service_account_id: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
+          TF_VAR_ice_servers: ${{ vars.ICE_SERVERS }}
         run: |
           terraform apply -auto-approve -input=false
 

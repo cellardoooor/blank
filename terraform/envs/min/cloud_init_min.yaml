@@ -49,6 +49,7 @@ write_files:
             DEFAULT_USER: DEFAULT_USER_PLACEHOLDER
             DEFAULT_PASSWORD: DEFAULT_PASSWORD_PLACEHOLDER
             ENCRYPTION_KEY: ENCRYPTION_KEY_PLACEHOLDER
+            ICE_SERVERS: ICE_SERVERS_PLACEHOLDER
           expose:
             - "8080"
 
@@ -106,12 +107,14 @@ write_files:
       DEFAULT_USER_DECODED=$(echo '${default_user_b64}' | base64 -d)
       DEFAULT_PASSWORD_DECODED=$(echo '${default_password_b64}' | base64 -d)
       ENCRYPTION_KEY_DECODED=$(echo '${encryption_key_b64}' | base64 -d)
+      ICE_SERVERS_DECODED=$(echo '${ice_servers_b64}' | base64 -d)
 
       sed -i "s#JWT_SECRET_PLACEHOLDER#$JWT_SECRET_DECODED#g" /opt/messenger/docker-compose.yml
       sed -i "s#DB_PASSWORD_PLACEHOLDER#$DB_PASSWORD_DECODED#g" /opt/messenger/docker-compose.yml
       sed -i "s#DEFAULT_USER_PLACEHOLDER#$DEFAULT_USER_DECODED#g" /opt/messenger/docker-compose.yml
       sed -i "s#DEFAULT_PASSWORD_PLACEHOLDER#$DEFAULT_PASSWORD_DECODED#g" /opt/messenger/docker-compose.yml
       sed -i "s#ENCRYPTION_KEY_PLACEHOLDER#$ENCRYPTION_KEY_DECODED#g" /opt/messenger/docker-compose.yml
+      sed -i "s#ICE_SERVERS_PLACEHOLDER#$ICE_SERVERS_DECODED#g" /opt/messenger/docker-compose.yml
 
       echo "=== Starting all services ==="
       cd /opt/messenger

@@ -75,6 +75,7 @@ module "compute" {
   default_user     = var.default_user
   default_password = var.default_password
   encryption_key   = var.encryption_key
+  ice_servers      = var.ice_servers
 
   min_instances = var.min_instances
   max_instances = var.max_instances

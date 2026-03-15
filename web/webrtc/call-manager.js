@@ -292,14 +292,14 @@ class CallManager {
   }
 
   sendIceCandidate(participantId, candidate) {
-    console.log('[DEBUG] sendIceCandidate: Sending ICE candidate to', participantId);
+    console.log('[WebRTC] sendIceCandidate: Sending ICE candidate to', participantId);
     if (!this.activeCall) {
-      console.error('[DEBUG] sendIceCandidate: No active call when sending ICE candidate');
+      console.error('[WebRTC] sendIceCandidate: No active call when sending ICE candidate');
       return;
     }
     
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.error('[DEBUG] sendIceCandidate: WebSocket not connected, cannot send ICE candidate');
+      console.error('[WebRTC] sendIceCandidate: WebSocket not connected, cannot send ICE candidate');
       return;
     }
     
@@ -312,7 +312,10 @@ class CallManager {
       sdpMLineIndex: candidate.sdpMLineIndex,
       usernameFragment: candidate.usernameFragment
     };
-    console.log('[DEBUG] sendIceCandidate: Candidate data:', candidateData.candidate ? candidateData.candidate.substring(0, 50) + '...' : 'null');
+    
+    // Log candidate type for debugging (host, srflx, relay)
+    const candidateType = candidateData.candidate?.split(' ')[7] || 'unknown';
+    console.log('[WebRTC] sendIceCandidate: Candidate type:', candidateType, 'data:', candidateData.candidate?.substring(0, 80) + '...');
     
     this.ws.send(JSON.stringify({
       type: 'call_ice_candidate',
@@ -464,15 +467,20 @@ class CallManager {
 
   async handleIceCandidate(data) {
     const { call_id, user_id: senderUserId, candidate } = data;
-    console.log('[DEBUG] handleIceCandidate: Received ICE candidate from', senderUserId);
+    console.log('[WebRTC] handleIceCandidate: Received ICE candidate from', senderUserId, 'type:', candidate?.candidate?.split(' ')[7] || 'unknown');
 
     // Look up peer connection by the sender's user ID
     const pc = this.peerConnections.get(senderUserId);
     if (pc) {
-      console.log('[DEBUG] handleIceCandidate: Adding ICE candidate, ICE state:', pc.connection.iceConnectionState);
-      await pc.addIceCandidate(candidate);
+      console.log('[WebRTC] handleIceCandidate: Adding ICE candidate, current ICE state:', pc.connection.iceConnectionState);
+      try {
+        await pc.addIceCandidate(candidate);
+        console.log('[WebRTC] handleIceCandidate: ICE candidate added successfully');
+      } catch (err) {
+        console.error('[WebRTC] handleIceCandidate: Failed to add ICE candidate:', err);
+      }
     } else {
-      console.error('[DEBUG] handleIceCandidate: No peer connection found for', senderUserId);
+      console.error('[WebRTC] handleIceCandidate: No peer connection found for', senderUserId);
     }
   }
 

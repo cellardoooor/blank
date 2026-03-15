@@ -27,6 +27,16 @@ class PeerConnection {
     // Handle ICE candidate events
     this.connection.onicecandidate = (event) => {
       if (event.candidate) {
+        // Log ICE candidate details for debugging
+        console.log('[WebRTC] ICE candidate:', {
+          type: event.candidate.type,
+          protocol: event.candidate.protocol,
+          address: event.candidate.address || event.candidate.ip,
+          port: event.candidate.port,
+          relatedAddress: event.candidate.relatedAddress,
+          relatedPort: event.candidate.relatedPort
+        });
+        
         // Send ICE candidate to signaling server
         window.dispatchEvent(new CustomEvent('iceCandidate', {
           detail: {
@@ -34,6 +44,8 @@ class PeerConnection {
             candidate: event.candidate
           }
         }));
+      } else {
+        console.log('[WebRTC] ICE gathering complete - all candidates collected');
       }
     };
 
@@ -50,7 +62,7 @@ class PeerConnection {
 
     // Handle connection state changes
     this.connection.onconnectionstatechange = () => {
-      console.log(`Connection state: ${this.connection.connectionState}`);
+      console.log(`[WebRTC] Connection state: ${this.connection.connectionState}`);
       if (this.connection.connectionState === 'failed' || 
           this.connection.connectionState === 'disconnected') {
         window.dispatchEvent(new CustomEvent('connectionState', {
@@ -60,6 +72,21 @@ class PeerConnection {
           }
         }));
       }
+    };
+
+    // Handle ICE connection state changes (most important for debugging)
+    this.connection.oniceconnectionstatechange = () => {
+      console.log(`[WebRTC] ICE connection state: ${this.connection.iceConnectionState}`);
+      console.log(`[WebRTC] ICE gathering state: ${this.connection.iceGatheringState}`);
+      
+      // Dispatch event for UI updates
+      window.dispatchEvent(new CustomEvent('iceConnectionState', {
+        detail: {
+          userId: this.userId,
+          state: this.connection.iceConnectionState,
+          gatheringState: this.connection.iceGatheringState
+        }
+      }));
     };
 
     return this.connection;
@@ -72,6 +99,15 @@ class PeerConnection {
 
     const offer = await this.connection.createOffer();
     await this.connection.setLocalDescription(offer);
+    
+    // Log SDP details for debugging
+    console.log('[WebRTC] Offer created:', {
+      hasAudio: offer.sdp.includes('m=audio'),
+      hasVideo: offer.sdp.includes('m=video'),
+      sdpLength: offer.sdp.length,
+      sdpPreview: offer.sdp.substring(0, 500)
+    });
+    
     return offer;
   }
 
@@ -80,9 +116,17 @@ class PeerConnection {
       await this.createPeerConnection();
     }
 
-    console.log('createAnswer called, connection state:', this.connection.connectionState);
+    console.log('[WebRTC] createAnswer called, connection state:', this.connection.connectionState);
     const answer = await this.connection.createAnswer();
     await this.connection.setLocalDescription(answer);
+    
+    // Log SDP details for debugging
+    console.log('[WebRTC] Answer created:', {
+      hasAudio: answer.sdp.includes('m=audio'),
+      hasVideo: answer.sdp.includes('m=video'),
+      sdpLength: answer.sdp.length
+    });
+    
     return answer;
   }
 

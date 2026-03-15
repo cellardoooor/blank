@@ -79,6 +79,21 @@ Internet
 | `JWT_DURATION` | Время жизни токена | `24h` |
 | `DB_USER` | Пользователь БД | `messenger` |
 | `DB_NAME` | Имя базы данных | `messenger` |
+| `ICE_SERVERS` | ICE серверы для WebRTC звонков | OpenRelay (бесплатный TURN) |
+
+#### ICE_SERVERS для WebRTC звонков
+
+**ICE_SERVERS** - JSON массив STUN/TURN серверов для WebRTC звонков. TURN сервер обязателен для работы звонков между пользователями за NAT.
+
+**По умолчанию** используется бесплатный публичный TURN сервер OpenRelay (10GB/месяц):
+```json
+[{"urls":"stun:stun.l.google.com:19302"},{"urls":"turn:openrelay.metered.ca:80","username":"openrelayproject","credential":"openrelayproject"},{"urls":"turn:openrelay.metered.ca:443","username":"openrelayproject","credential":"openrelayproject"},{"urls":"turn:openrelay.metered.ca:443?transport=tcp","username":"openrelayproject","credential":"openrelayproject"}]
+```
+
+**Альтернативы:**
+- **Self-hosted coturn** - свой TURN сервер (рекомендуется для продакшена)
+- **Twilio/Xirsys** - платные сервисы с высокой надёжностью
+- **Только STUN** - работает только для ~60-70% соединений
 
 ### 2. Получение YC_TOKEN
 

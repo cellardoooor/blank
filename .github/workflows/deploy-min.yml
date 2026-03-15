@@ -94,6 +94,7 @@ jobs:
           TF_VAR_default_user: ${{ secrets.DEFAULT_USER }}
           TF_VAR_default_password: ${{ secrets.DEFAULT_PASSWORD }}
           TF_VAR_domain: ${{ vars.DOMAIN }}
+          TF_VAR_ice_servers: ${{ vars.ICE_SERVERS }}
         run: |
           terraform apply -auto-approve -input=false
 
