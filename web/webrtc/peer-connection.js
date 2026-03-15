@@ -75,17 +75,11 @@ class PeerConnection {
     return offer;
   }
 
-  async createAnswer(offer) {
+  async createAnswer() {
     if (!this.connection) {
       await this.createPeerConnection();
     }
 
-    try {
-      await this.connection.setRemoteDescription(offer);
-    } catch (err) {
-      console.error('Failed to set remote description in createAnswer:', err);
-      throw err;
-    }
     const answer = await this.connection.createAnswer();
     await this.connection.setLocalDescription(answer);
     return answer;
