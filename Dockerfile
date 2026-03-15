@@ -5,11 +5,11 @@ RUN apk add --no-cache git ca-certificates tzdata
 WORKDIR /build
 
 COPY go.mod go.sum* ./
-RUN go mod download -x 2>&1 || true
+RUN go mod download || true
 
 COPY . .
-RUN go mod tidy -v 2>&1 && go mod download -x 2>&1 && \
-    CGO_ENABLED=0 GOOS=linux go build -v -ldflags="-w -s" -o server ./cmd/server 2>&1 || true
+RUN go mod tidy && go mod download && \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server ./cmd/server
 
 FROM gcr.io/distroless/static-debian11
 
