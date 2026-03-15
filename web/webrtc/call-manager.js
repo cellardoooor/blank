@@ -13,6 +13,7 @@ class CallManager {
     this.iceConfig = null; // Will be fetched from server
     this.pendingOffers = []; // Offers waiting for real call ID
     this.callIdResolve = null; // Promise resolver for call ID
+    this.localStream = null; // Local media stream for calls
   }
 
   async getICEConfig() {
@@ -113,11 +114,13 @@ class CallManager {
         externalStream.getTracks().forEach(track => {
           pc.connection.addTrack(track, externalStream);
         });
-      } else {
-        try {
-          // getLocalStream() will add tracks to the connection internally
-          await pc.getLocalStream();
-        } catch (err) {
+       } else {
+         try {
+           // getLocalStream() will add tracks to the connection internally
+           const stream = await pc.getLocalStream();
+           // Store the local stream for use in handleOffer
+           this.localStream = stream;
+         } catch (err) {
           console.error('Failed to get local stream:', err);
           // Notify user that their media is unavailable
           window.dispatchEvent(new CustomEvent('mediaError', {
@@ -323,26 +326,38 @@ class CallManager {
     // Get ICE config from server
     const iceConfig = await this.getICEConfig();
 
-    // Create peer connection for caller
-    const pc = new PeerConnection(caller_id, call_type, iceConfig);
-    await pc.createPeerConnection();
-    this.peerConnections.set(caller_id, pc);
+     // Create peer connection for caller
+     const pc = new PeerConnection(caller_id, call_type, iceConfig);
+     await pc.createPeerConnection();
+     this.peerConnections.set(caller_id, pc);
 
-    // Get local stream (tracks are added to connection inside getLocalStream)
-    try {
-      await pc.getLocalStream();
-    } catch (err) {
-      console.error('Failed to get local stream for answer:', err);
-      // Notify user that their media is unavailable
-      window.dispatchEvent(new CustomEvent('mediaError', {
-        detail: { 
-          userId: caller_id, 
-          error: err.message,
-          callType: call_type
+     // Use stored local stream if available, otherwise get a new one
+     // This ensures we use the same stream that was obtained in acceptCall()
+     if (this.localStream) {
+       // Add tracks from stored stream to the connection
+       this.localStream.getTracks().forEach(track => {
+         pc.connection.addTrack(track, this.localStream);
+       });
+       console.log('Using stored local stream for answer');
+     } else {
+       try {
+         // getLocalStream() will add tracks to the connection internally
+         const stream = await pc.getLocalStream();
+         // Store the local stream for future use
+         this.localStream = stream;
+        } catch (err) {
+          console.error('Failed to get local stream for answer:', err);
+          // Notify user that their media is unavailable
+          window.dispatchEvent(new CustomEvent('mediaError', {
+            detail: { 
+              userId: caller_id, 
+              error: err.message,
+              callType: call_type
+            }
+          }));
+          // Continue without local stream - call will be one-way
         }
-      }));
-      // Continue without local stream - call will be one-way
-    }
+      }
 
     // Set remote description from offer
     try {
