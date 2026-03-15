@@ -70,6 +70,7 @@ type CallOffer struct {
 	SDP          string      `json:"sdp"`
 	CallType     string      `json:"call_type"`
 	Participants []uuid.UUID `json:"participants"`
+	TargetUserID uuid.UUID   `json:"target_user_id,omitempty"`
 }
 
 type CallAnswer struct {
@@ -319,10 +320,13 @@ func (h *Hub) sendToClientChan(client *Client, msg interface{}) {
 }
 
 // trySend performs a non-blocking send to a channel
-func trySend[T any](ch chan<- T, msg T) {
+// Returns true if message was sent, false if channel was full (message dropped)
+func trySend[T any](ch chan<- T, msg T) bool {
 	select {
 	case ch <- msg:
+		return true
 	default:
+		return false
 	}
 }
 

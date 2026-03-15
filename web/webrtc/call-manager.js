@@ -234,6 +234,11 @@ class CallManager {
       return;
     }
     
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket not connected, cannot send offer');
+      return;
+    }
+    
     this.ws.send(JSON.stringify({
       type: 'call_offer',
       call_id: this.activeCall.id,
@@ -245,6 +250,11 @@ class CallManager {
   }
 
   async sendAnswer(participantId, answer) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket not connected, cannot send answer');
+      return;
+    }
+    
     this.ws.send(JSON.stringify({
       type: 'call_answer',
       call_id: this.activeCall.id,
@@ -256,6 +266,11 @@ class CallManager {
   sendIceCandidate(participantId, candidate) {
     if (!this.activeCall) {
       console.error('No active call when sending ICE candidate');
+      return;
+    }
+    
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket not connected, cannot send ICE candidate');
       return;
     }
     
@@ -322,7 +337,22 @@ class CallManager {
     }
 
     // Set remote description from offer
-    await pc.setRemoteDescription({ type: 'offer', sdp: sdp });
+    try {
+      await pc.setRemoteDescription({ type: 'offer', sdp: sdp });
+    } catch (err) {
+      console.error('Failed to set remote description in handleOffer:', err);
+      // Notify user about the error
+      window.dispatchEvent(new CustomEvent('mediaError', {
+        detail: { 
+          userId: caller_id, 
+          error: 'Failed to establish call - invalid SDP received',
+          callType: call_type
+        }
+      }));
+      // Clean up
+      this.peerConnections.delete(caller_id);
+      return;
+    }
 
     // Handle ICE candidates - MUST be set up BEFORE setLocalDescription
     // to catch early ICE candidates
@@ -347,6 +377,11 @@ class CallManager {
     await pc.connection.setLocalDescription(answer);
 
     // Send answer to caller
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket not connected, cannot send answer');
+      return;
+    }
+    
     this.ws.send(JSON.stringify({
       type: 'call_answer',
       call_id: call_id,

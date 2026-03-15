@@ -80,7 +80,12 @@ class PeerConnection {
       await this.createPeerConnection();
     }
 
-    await this.connection.setRemoteDescription(offer);
+    try {
+      await this.connection.setRemoteDescription(offer);
+    } catch (err) {
+      console.error('Failed to set remote description in createAnswer:', err);
+      throw err;
+    }
     const answer = await this.connection.createAnswer();
     await this.connection.setLocalDescription(answer);
     return answer;
@@ -90,7 +95,12 @@ class PeerConnection {
     if (!this.connection) {
       await this.createPeerConnection();
     }
-    await this.connection.setRemoteDescription(sdp);
+    try {
+      await this.connection.setRemoteDescription(sdp);
+    } catch (err) {
+      console.error('Failed to set remote description:', err);
+      throw err;
+    }
   }
 
   async addIceCandidate(candidate) {

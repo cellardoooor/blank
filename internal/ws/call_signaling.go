@@ -110,6 +110,28 @@ func (cs *CallSignaling) HandleCallOffer(client *Client, data []byte) {
 		return
 	}
 
+	// If target_user_id is specified, send directly to that participant
+	// Otherwise, broadcast to all participants (for backward compatibility)
+	if msg.TargetUserID != uuid.Nil {
+		// Get the target client
+		cs.hub.mu.RLock()
+		targetClient, ok := cs.hub.clients[msg.TargetUserID]
+		cs.hub.mu.RUnlock()
+		
+		if ok {
+			// Send offer directly to the target
+			sent := cs.hub.sendToClientChan(targetClient, msg)
+			if sent {
+				log.Printf("Sent call_offer directly to user %s for call %s", msg.TargetUserID, msg.CallID)
+			} else {
+				log.Printf("WARNING: call_offer channel full, message dropped for user %s in call %s", msg.TargetUserID, msg.CallID)
+			}
+		} else {
+			log.Printf("Target user %s not found for call_offer in call %s", msg.TargetUserID, msg.CallID)
+		}
+		return
+	}
+
 	// Get participants for this call with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), cs.contextTimeout)
 	defer cancel()
@@ -130,12 +152,11 @@ func (cs *CallSignaling) HandleCallOffer(client *Client, data []byte) {
 
 	// Create a single offer message and broadcast to all participants except sender
 	offer := CallOffer{
-		Type:     "call_offer",
-		CallID:   msg.CallID,
-		CallerID: msg.CallerID,
-		SDP:      msg.SDP,
-		CallType: msg.CallType,
-		// Participants field is not needed in the broadcast - each client knows they're a participant
+		Type:         "call_offer",
+		CallID:       msg.CallID,
+		CallerID:     msg.CallerID,
+		SDP:          msg.SDP,
+		CallType:     msg.CallType,
 		Participants: participantIDs,
 	}
 	
