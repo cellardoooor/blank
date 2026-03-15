@@ -19,7 +19,7 @@ class CallManager {
     if (this.iceConfig) return this.iceConfig;
     
     try {
-      const response = await apiRequest('/calls/ice-config');
+      const response = await apiRequest('/api/calls/ice-config');
       console.log('ICE config response:', response);
       if (response.ok) {
         this.iceConfig = await response.json();
