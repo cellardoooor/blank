@@ -75,6 +75,7 @@ type CallOffer struct {
 type CallAnswer struct {
 	Type     string    `json:"type"`
 	CallID   uuid.UUID `json:"call_id"`
+	CallerID uuid.UUID `json:"caller_id"`
 	CalleeID uuid.UUID `json:"callee_id"`
 	SDP      string    `json:"sdp"`
 }
