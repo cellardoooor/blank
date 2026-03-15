@@ -435,6 +435,9 @@ function handleIncomingMessage(msg) {
             if (isUserAtBottom()) {
                 smartScrollToBottom(200);
             }
+
+            // Send read status for incoming message in active chat
+            sendReadStatus(partnerId);
         }
     } else if (isIncoming) {
         // Incoming message in non-active chat - update UI
@@ -552,7 +555,8 @@ async function loadChats() {
     }
 }
 
-async function refreshAllData(preserveScroll = true) {
+async function refreshAllData(options = {}) {
+    const { preserveScroll = true } = options;
     if (!token) return;
     
     const now = Date.now();
@@ -700,12 +704,9 @@ async function selectChat(chatUserId) {
     // Reset favicon when opening chat with unread messages
     setOriginalFavicon();
     
-    await loadMessages(chatUserId, true);
+    await loadMessages(chatUserId, false);
     
     sendReadStatus(chatUserId);
-    
-    // Auto-scroll to bottom
-    smartScrollToBottom(300);
     
     document.getElementById('message-input').focus();
 }
@@ -757,6 +758,11 @@ async function loadMessages(chatUserId, preserveScroll = false) {
     // Clear container
     container.innerHTML = '';
     
+    // Scroll to bottom immediately when clearing (before messages load)
+    if (!preserveScroll) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
     try {
         const res = await apiRequest(`/messages/${chatUserId}`, {
             signal: messagesAbortController.signal
@@ -790,7 +796,7 @@ async function loadMessages(chatUserId, preserveScroll = false) {
             if (preserveScroll) {
                 restoreScrollPosition();
             } else {
-                smartScrollToBottom(100); // Small delay to ensure DOM is updated
+                smartScrollToBottom(100, true); // Small delay to ensure DOM is updated
             }
         });
         
@@ -1319,8 +1325,8 @@ function setupScrollListeners() {
     }
 }
 
-function smartScrollToBottom(delay = 0) {
-    if (scrollState.isUserScrolling) {
+function smartScrollToBottom(delay = 0, force = false) {
+    if (!force && scrollState.isUserScrolling) {
         // User is scrolling manually, don't interrupt
         return;
     }
@@ -1488,7 +1494,9 @@ function setupEventListeners() {
 document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible' && token) {
         clearTimeout(refreshDebounceTimer);
-        refreshDebounceTimer = setTimeout(refreshAllData, 500);
+        refreshDebounceTimer = setTimeout(() => {
+            refreshAllData({ preserveScroll: false });
+        }, 500);
 
         // Reset favicon when tab becomes visible
         setOriginalFavicon();
@@ -1503,11 +1511,6 @@ document.addEventListener('visibilitychange', function() {
                 sendReadStatus(currentChat);
             }
         }
-        
-        // Restore scroll position after refresh
-        requestAnimationFrame(() => {
-            restoreScrollPosition();
-        });
     }
 });
 

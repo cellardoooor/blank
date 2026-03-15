@@ -10,20 +10,20 @@ import (
 type Hub struct {
 	clients        map[uuid.UUID]*Client
 	broadcast      chan Message
-	readStatus    chan ReadStatus
+	readStatus     chan ReadStatus
 	deliveryStatus chan DeliveryStatus
-	typingStatus   chan TypingStatus
-	callStart      chan CallStart
-	callOffer      chan CallOffer
-	callAnswer     chan CallAnswer
+	typingStatus     chan TypingStatus
+	callStart        chan CallStart
+	callOffer        chan CallOffer
+	callAnswer       chan CallAnswer
 	callIceCandidate chan CallIceCandidate
-	callJoin       chan CallJoin
-	callLeave      chan CallLeave
-	callEnd        chan CallEnd
-	callReject     chan CallReject
-	register      chan *Client
-	unregister    chan *Client
-	mu            sync.RWMutex
+	callJoin         chan CallJoin
+	callLeave        chan CallLeave
+	callEnd          chan CallEnd
+	callReject       chan CallReject
+	register         chan *Client
+	unregister       chan *Client
+	mu               sync.RWMutex
 }
 
 type Message struct {
@@ -48,10 +48,10 @@ type DeliveryStatus struct {
 }
 
 type TypingStatus struct {
-	Type      string    `json:"type"`
-	SenderID  uuid.UUID `json:"sender_id"`
+	Type       string    `json:"type"`
+	SenderID   uuid.UUID `json:"sender_id"`
 	ReceiverID uuid.UUID `json:"receiver_id"`
-	Text      string    `json:"text"`
+	Text       string    `json:"text"`
 }
 
 type CallStart struct {
@@ -179,11 +179,19 @@ func (h *Hub) Run() {
 		case status := <-h.readStatus:
 			h.mu.RLock()
 			partner, ok := h.clients[status.PartnerID]
+			sender, senderOk := h.clients[status.ReaderID]
 			h.mu.RUnlock()
 
 			if ok {
 				select {
 				case partner.sendReadStatus <- status:
+				default:
+				}
+			}
+
+			if senderOk && status.ReaderID != status.PartnerID {
+				select {
+				case sender.sendReadStatus <- status:
 				default:
 				}
 			}
