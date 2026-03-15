@@ -705,20 +705,24 @@ input::placeholder, textarea::placeholder {
     gap: 8px;
 }
 
-#call-controls button {
+#audio-call-btn {
     width: 40px;
     height: 40px;
     border-radius: 50%;
     border: 2px solid var(--black);
-    font-size: 18px;
+    background: var(--white);
+    color: var(--black);
     transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-#call-controls button:hover {
+#audio-call-btn:hover {
     background: var(--gray-200);
 }
 
-#call-controls button:active {
+#audio-call-btn:active {
     transform: scale(0.95);
 }
 
@@ -820,35 +824,48 @@ input::placeholder, textarea::placeholder {
 }
 
 #accept-call-btn {
-    background: var(--black);
-    color: var(--white);
-    border-color: var(--black);
-    width: 100px;
+    padding: 8px 16px;
+    border: 2px solid var(--black);
+    color: var(--black);
+    background: var(--white);
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: var(--border-radius-sm);
 }
 
 #accept-call-btn:hover {
-    background: var(--gray-700);
+    background: var(--black);
+    color: var(--white);
 }
 
 #reject-call-btn {
-    background: var(--white);
+    padding: 8px 16px;
+    border: 2px solid var(--black);
     color: var(--black);
-    border-color: var(--black);
-    width: 100px;
+    background: var(--white);
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: var(--border-radius-sm);
 }
 
 #reject-call-btn:hover {
-    background: var(--gray-200);
+    background: var(--black);
+    color: var(--white);
 }
 
 #end-call-btn {
-    background: var(--white);
+    padding: 8px 16px;
+    border: 2px solid var(--black);
     color: var(--black);
-    border-color: var(--black);
+    background: var(--white);
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: var(--border-radius-sm);
 }
 
 #end-call-btn:hover {
-    background: var(--gray-200);
+    background: var(--black);
+    color: var(--white);
 }
 
 /* Mute/Camera buttons */
