@@ -35,8 +35,8 @@ const PONG_TIMEOUT = 10000;
 let typingDebounceTimer = null;
 let typingHideTimer = null;
 let currentTypingPreview = null;
-const TYPING_DEBOUNCE = 500;
-const TYPING_HIDE_DELAY = 2000;
+const TYPING_DEBOUNCE = 2000;
+const TYPING_HIDE_DELAY = 5000;
 
 // Scroll state management
 let scrollState = {
