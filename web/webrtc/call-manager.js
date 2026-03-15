@@ -19,8 +19,8 @@ class CallManager {
     if (this.iceConfig) return this.iceConfig;
     
     try {
-      console.log('Fetching ICE config from /api/calls/ice-config');
-      const response = await apiRequest('/api/calls/ice-config');
+      console.log('Fetching ICE config from /calls/ice-config');
+      const response = await apiRequest('/calls/ice-config');
       console.log('ICE config response:', response);
       console.log('ICE config response status:', response.status);
       console.log('ICE config response headers:', [...response.headers.entries()]);
