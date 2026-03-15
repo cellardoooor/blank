@@ -20,8 +20,12 @@ class CallManager {
     
     try {
       const response = await apiRequest('/calls/ice-config');
+      console.log('ICE config response:', response);
       if (response.ok) {
         this.iceConfig = await response.json();
+        console.log('ICE config:', this.iceConfig);
+      } else {
+        console.error('ICE config request failed:', response.status, response.statusText);
       }
     } catch (err) {
       console.error('Failed to fetch ICE config:', err);
