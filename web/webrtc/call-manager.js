@@ -110,10 +110,15 @@ class CallManager {
       // Note: getLocalStream() already adds tracks to the connection internally
       // so we only need to add tracks for external streams
       if (externalStream) {
+        console.log('[DEBUG] startCall: Using external stream, tracks:', externalStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, id: t.id })));
         // Add tracks from external stream to peer connection
         externalStream.getTracks().forEach(track => {
+          console.log('[DEBUG] startCall: Adding track to connection:', track.kind, track.id);
           pc.connection.addTrack(track, externalStream);
         });
+        // Store the local stream for use in handleOffer
+        this.localStream = externalStream;
+        console.log('[DEBUG] startCall: Stored external stream as localStream');
        } else {
          try {
            // getLocalStream() will add tracks to the connection internally
@@ -145,9 +150,19 @@ class CallManager {
 
       // Handle remote stream
       pc.connection.ontrack = (event) => {
+        console.log('[DEBUG] startCall: ontrack event received, track:', event.track.kind, 'streams:', event.streams.length);
         window.dispatchEvent(new CustomEvent('remoteStream', {
           detail: { userId: pid, stream: event.streams[0] }
         }));
+      };
+      
+      // Log connection state changes
+      pc.connection.onconnectionstatechange = () => {
+        console.log('[DEBUG] startCall: Connection state changed to:', pc.connection.connectionState);
+      };
+      
+      pc.connection.oniceconnectionstatechange = () => {
+        console.log('[DEBUG] startCall: ICE connection state changed to:', pc.connection.iceConnectionState);
       };
     }
 
@@ -156,6 +171,8 @@ class CallManager {
     for (const pid of participantIds) {
       const pc = this.peerConnections.get(pid);
       const offer = await pc.createOffer();
+      console.log('[DEBUG] startCall: Created offer for', pid, 'SDP contains audio:', offer.sdp.includes('m=audio'), 'video:', offer.sdp.includes('m=video'));
+      console.log('[DEBUG] startCall: Offer SDP (first 500 chars):', offer.sdp.substring(0, 500));
       offers.push({ participantId: pid, offer });
     }
 
@@ -275,13 +292,14 @@ class CallManager {
   }
 
   sendIceCandidate(participantId, candidate) {
+    console.log('[DEBUG] sendIceCandidate: Sending ICE candidate to', participantId);
     if (!this.activeCall) {
-      console.error('No active call when sending ICE candidate');
+      console.error('[DEBUG] sendIceCandidate: No active call when sending ICE candidate');
       return;
     }
     
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.error('WebSocket not connected, cannot send ICE candidate');
+      console.error('[DEBUG] sendIceCandidate: WebSocket not connected, cannot send ICE candidate');
       return;
     }
     
@@ -294,6 +312,7 @@ class CallManager {
       sdpMLineIndex: candidate.sdpMLineIndex,
       usernameFragment: candidate.usernameFragment
     };
+    console.log('[DEBUG] sendIceCandidate: Candidate data:', candidateData.candidate ? candidateData.candidate.substring(0, 50) + '...' : 'null');
     
     this.ws.send(JSON.stringify({
       type: 'call_ice_candidate',
@@ -333,9 +352,12 @@ class CallManager {
 
      // Use stored local stream if available, otherwise get a new one
      // This ensures we use the same stream that was obtained in acceptCall()
+     console.log('[DEBUG] handleOffer: localStream exists?', !!this.localStream);
      if (this.localStream) {
+       console.log('[DEBUG] handleOffer: Using stored local stream, tracks:', this.localStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, id: t.id })));
        // Add tracks from stored stream to the connection
        this.localStream.getTracks().forEach(track => {
+         console.log('[DEBUG] handleOffer: Adding track to connection:', track.kind, track.id);
          pc.connection.addTrack(track, this.localStream);
        });
        console.log('Using stored local stream for answer');
@@ -390,15 +412,26 @@ class CallManager {
 
     // Handle remote stream
     pc.connection.ontrack = (event) => {
+      console.log('[DEBUG] handleOffer: ontrack event received, track:', event.track.kind, 'streams:', event.streams.length);
       window.dispatchEvent(new CustomEvent('remoteStream', {
         detail: { userId: caller_id, stream: event.streams[0] }
       }));
+    };
+    
+    // Log connection state changes
+    pc.connection.onconnectionstatechange = () => {
+      console.log('[DEBUG] handleOffer: Connection state changed to:', pc.connection.connectionState);
+    };
+    
+    pc.connection.oniceconnectionstatechange = () => {
+      console.log('[DEBUG] handleOffer: ICE connection state changed to:', pc.connection.iceConnectionState);
     };
 
     // Create answer
     console.log('Creating answer, connection state:', pc.connection.connectionState);
     const answer = await pc.createAnswer();
-    console.log('Answer created:', answer);
+    console.log('[DEBUG] handleOffer: Answer created, SDP contains audio:', answer.sdp.includes('m=audio'), 'video:', answer.sdp.includes('m=video'));
+    console.log('[DEBUG] handleOffer: Answer SDP (first 500 chars):', answer.sdp.substring(0, 500));
     // Note: createAnswer() already calls setLocalDescription internally
 
     // Send answer to caller
@@ -417,20 +450,29 @@ class CallManager {
 
   async handleAnswer(data) {
     const { call_id, callee_id, sdp } = data;
+    console.log('[DEBUG] handleAnswer: Received answer from', callee_id, 'SDP contains audio:', sdp.includes('m=audio'), 'video:', sdp.includes('m=video'));
 
     const pc = this.peerConnections.get(callee_id);
     if (pc) {
+      console.log('[DEBUG] handleAnswer: Setting remote description, current state:', pc.connection.connectionState);
       await pc.setRemoteDescription({ type: 'answer', sdp: sdp });
+      console.log('[DEBUG] handleAnswer: Remote description set, new state:', pc.connection.connectionState);
+    } else {
+      console.error('[DEBUG] handleAnswer: No peer connection found for', callee_id);
     }
   }
 
   async handleIceCandidate(data) {
     const { call_id, user_id: senderUserId, candidate } = data;
+    console.log('[DEBUG] handleIceCandidate: Received ICE candidate from', senderUserId);
 
     // Look up peer connection by the sender's user ID
     const pc = this.peerConnections.get(senderUserId);
     if (pc) {
+      console.log('[DEBUG] handleIceCandidate: Adding ICE candidate, ICE state:', pc.connection.iceConnectionState);
       await pc.addIceCandidate(candidate);
+    } else {
+      console.error('[DEBUG] handleIceCandidate: No peer connection found for', senderUserId);
     }
   }
 

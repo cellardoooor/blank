@@ -1702,12 +1702,17 @@ async function acceptCall() {
         // Get local stream BEFORE joining the call
         // This ensures we have media available when the offer arrives
         const stream = await mediaUtils.getLocalStream(incomingCall.callType);
+        console.log('[DEBUG] acceptCall: Got local stream, tracks:', stream ? stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, id: t.id })) : 'null');
         
         // Attach local stream to video element
         const localVideo = document.getElementById('local-video');
         if (localVideo && stream) {
             localVideo.srcObject = stream;
         }
+        
+        // Store the stream in callManager so handleOffer can use it
+        callManager.localStream = stream;
+        console.log('[DEBUG] acceptCall: Stored stream in callManager.localStream');
         
         // Join the call
         await callManager.joinCall(incomingCall.callId);
