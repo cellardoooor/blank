@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -39,6 +40,10 @@ func (s *Storage) User() storage.UserRepository {
 
 func (s *Storage) Message() storage.MessageRepository {
 	return &MessageRepo{pool: s.pool}
+}
+
+func (s *Storage) Call() storage.CallRepository {
+	return &CallRepo{pool: s.pool}
 }
 
 func (s *Storage) WithTx(ctx context.Context, fn func(context.Context) error) error {
@@ -94,6 +99,29 @@ func (r *UserRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.User, erro
 		return nil, err
 	}
 	return user, nil
+}
+
+func (r *UserRepo) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]model.User, error) {
+	if len(ids) == 0 {
+		return []model.User{}, nil
+	}
+	conn := getConn(ctx, r.pool)
+	sql := `SELECT id, username, password_hash, created_at FROM users WHERE id = ANY($1)`
+	rows, err := conn.Query(ctx, sql, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []model.User
+	for rows.Next() {
+		var user model.User
+		if err := rows.Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, rows.Err()
 }
 
 func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*model.User, error) {
@@ -351,4 +379,184 @@ func (r *MessageRepo) GetUnreadCounts(ctx context.Context, userID uuid.UUID) (ma
 		counts[senderID] = count
 	}
 	return counts, rows.Err()
+}
+
+type CallRepo struct {
+	pool *pgxpool.Pool
+}
+
+func (r *CallRepo) Create(ctx context.Context, call *model.Call) error {
+	conn := getConn(ctx, r.pool)
+	sql := `INSERT INTO calls (id, initiator_id, call_type, status, created_at) VALUES ($1, $2, $3, $4, $5)`
+	_, err := conn.Exec(ctx, sql, call.ID, call.InitiatorID, call.CallType, call.Status, call.CreatedAt)
+	return err
+}
+
+func (r *CallRepo) GetByID(ctx context.Context, id uuid.UUID) (*model.Call, error) {
+	conn := getConn(ctx, r.pool)
+	sql := `SELECT id, initiator_id, call_type, status, started_at, ended_at, created_at FROM calls WHERE id = $1`
+	call := &model.Call{}
+	err := conn.QueryRow(ctx, sql, id).Scan(&call.ID, &call.InitiatorID, &call.CallType, &call.Status, &call.StartedAt, &call.EndedAt, &call.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return call, nil
+}
+
+func (r *CallRepo) GetByStatus(ctx context.Context, status string) ([]model.Call, error) {
+	conn := getConn(ctx, r.pool)
+	sql := `SELECT id, initiator_id, call_type, status, started_at, ended_at, created_at FROM calls WHERE status = $1 ORDER BY created_at DESC`
+	rows, err := conn.Query(ctx, sql, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	calls := []model.Call{}
+	for rows.Next() {
+		var call model.Call
+		if err := rows.Scan(&call.ID, &call.InitiatorID, &call.CallType, &call.Status, &call.StartedAt, &call.EndedAt, &call.CreatedAt); err != nil {
+			return nil, err
+		}
+		calls = append(calls, call)
+	}
+	return calls, rows.Err()
+}
+
+func (r *CallRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status string) error {
+	conn := getConn(ctx, r.pool)
+	sql := `UPDATE calls SET status = $1 WHERE id = $2`
+	_, err := conn.Exec(ctx, sql, status, id)
+	return err
+}
+
+func (r *CallRepo) UpdateStartedAt(ctx context.Context, id uuid.UUID, startedAt *time.Time) error {
+	conn := getConn(ctx, r.pool)
+	sql := `UPDATE calls SET started_at = $1 WHERE id = $2`
+	_, err := conn.Exec(ctx, sql, startedAt, id)
+	return err
+}
+
+func (r *CallRepo) UpdateEndedAt(ctx context.Context, id uuid.UUID, endedAt *time.Time) error {
+	conn := getConn(ctx, r.pool)
+	sql := `UPDATE calls SET ended_at = $1 WHERE id = $2`
+	_, err := conn.Exec(ctx, sql, endedAt, id)
+	return err
+}
+
+func (r *CallRepo) Delete(ctx context.Context, id uuid.UUID) error {
+	conn := getConn(ctx, r.pool)
+	sql := `DELETE FROM calls WHERE id = $1`
+	_, err := conn.Exec(ctx, sql, id)
+	return err
+}
+
+func (r *CallRepo) CreateParticipant(ctx context.Context, participant *model.CallParticipant) error {
+	conn := getConn(ctx, r.pool)
+	sql := `INSERT INTO call_participants (id, call_id, user_id, status, joined_at, left_at, audio_enabled, video_enabled, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
+	_, err := conn.Exec(ctx, sql, participant.ID, participant.CallID, participant.UserID, participant.Status, participant.JoinedAt, participant.LeftAt, participant.AudioEnabled, participant.VideoEnabled, participant.CreatedAt)
+	return err
+}
+
+func (r *CallRepo) GetParticipantsByCallID(ctx context.Context, callID uuid.UUID) ([]model.CallParticipant, error) {
+	conn := getConn(ctx, r.pool)
+	sql := `SELECT id, call_id, user_id, status, joined_at, left_at, audio_enabled, video_enabled, created_at FROM call_participants WHERE call_id = $1 ORDER BY created_at`
+	rows, err := conn.Query(ctx, sql, callID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	participants := []model.CallParticipant{}
+	for rows.Next() {
+		var participant model.CallParticipant
+		if err := rows.Scan(&participant.ID, &participant.CallID, &participant.UserID, &participant.Status, &participant.JoinedAt, &participant.LeftAt, &participant.AudioEnabled, &participant.VideoEnabled, &participant.CreatedAt); err != nil {
+			return nil, err
+		}
+		participants = append(participants, participant)
+	}
+	return participants, rows.Err()
+}
+
+func (r *CallRepo) GetParticipant(ctx context.Context, callID, userID uuid.UUID) (*model.CallParticipant, error) {
+	conn := getConn(ctx, r.pool)
+	sql := `SELECT id, call_id, user_id, status, joined_at, left_at, audio_enabled, video_enabled, created_at FROM call_participants WHERE call_id = $1 AND user_id = $2`
+	participant := &model.CallParticipant{}
+	err := conn.QueryRow(ctx, sql, callID, userID).Scan(&participant.ID, &participant.CallID, &participant.UserID, &participant.Status, &participant.JoinedAt, &participant.LeftAt, &participant.AudioEnabled, &participant.VideoEnabled, &participant.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return participant, nil
+}
+
+func (r *CallRepo) UpdateParticipantStatus(ctx context.Context, callID, userID uuid.UUID, status string) error {
+	conn := getConn(ctx, r.pool)
+	sql := `UPDATE call_participants SET status = $1 WHERE call_id = $2 AND user_id = $3`
+	_, err := conn.Exec(ctx, sql, status, callID, userID)
+	return err
+}
+
+func (r *CallRepo) UpdateParticipantJoinedAt(ctx context.Context, callID, userID uuid.UUID, joinedAt *time.Time) error {
+	conn := getConn(ctx, r.pool)
+	sql := `UPDATE call_participants SET joined_at = $1 WHERE call_id = $2 AND user_id = $3`
+	_, err := conn.Exec(ctx, sql, joinedAt, callID, userID)
+	return err
+}
+
+func (r *CallRepo) UpdateParticipantLeftAt(ctx context.Context, callID, userID uuid.UUID, leftAt *time.Time) error {
+	conn := getConn(ctx, r.pool)
+	sql := `UPDATE call_participants SET left_at = $1 WHERE call_id = $2 AND user_id = $3`
+	_, err := conn.Exec(ctx, sql, leftAt, callID, userID)
+	return err
+}
+
+func (r *CallRepo) UpdateParticipantMediaSettings(ctx context.Context, callID, userID uuid.UUID, audioEnabled, videoEnabled bool) error {
+	conn := getConn(ctx, r.pool)
+	sql := `UPDATE call_participants SET audio_enabled = $1, video_enabled = $2 WHERE call_id = $3 AND user_id = $4`
+	_, err := conn.Exec(ctx, sql, audioEnabled, videoEnabled, callID, userID)
+	return err
+}
+
+func (r *CallRepo) DeleteParticipant(ctx context.Context, callID, userID uuid.UUID) error {
+	conn := getConn(ctx, r.pool)
+	sql := `DELETE FROM call_participants WHERE call_id = $1 AND user_id = $2`
+	_, err := conn.Exec(ctx, sql, callID, userID)
+	return err
+}
+
+func (r *CallRepo) GetCallHistory(ctx context.Context, userID uuid.UUID, limit, offset int) ([]model.CallHistoryItem, error) {
+	conn := getConn(ctx, r.pool)
+	sql := `
+		SELECT c.id, c.initiator_id, c.call_type, c.status, c.started_at, c.ended_at, c.created_at,
+			u.id, u.username, u.created_at
+		FROM calls c
+		LEFT JOIN call_participants cp ON cp.call_id = c.id
+		LEFT JOIN users u ON u.id = c.initiator_id
+		WHERE cp.user_id = $1
+		ORDER BY c.created_at DESC
+		LIMIT $2 OFFSET $3`
+	rows, err := conn.Query(ctx, sql, userID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	history := []model.CallHistoryItem{}
+	for rows.Next() {
+		var item model.CallHistoryItem
+		var user model.User
+		err := rows.Scan(&item.CallID, &item.InitiatorID, &item.CallType, &item.Status, &item.StartedAt, &item.EndedAt, &item.CallCreatedAt, &user.ID, &user.Username, &user.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		item.Initiator = &user
+		history = append(history, item)
+	}
+	return history, rows.Err()
 }

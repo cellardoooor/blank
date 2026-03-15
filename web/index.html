@@ -59,6 +59,10 @@
                             <div id="chat-username"></div>
                             <div id="chat-status"></div>
                         </div>
+                        <div id="call-controls">
+                            <button id="audio-call-btn" onclick="startAudioCall()" title="Audio Call">📞</button>
+                            <button id="video-call-btn" onclick="startVideoCall()" title="Video Call">📹</button>
+                        </div>
                     </div>
                     <div id="messages-container">
                         <div id="messages"></div>
@@ -116,6 +120,50 @@
         </div>
     </div>
 
+    <!-- Call Modal -->
+    <div id="call-modal" class="modal">
+        <div class="modal-content call-modal-content">
+            <div class="modal-header">
+                <h3 id="call-header-title">Incoming Call</h3>
+                <button onclick="endCall()" class="btn-secondary" id="end-call-btn">End</button>
+            </div>
+            <div class="modal-body call-modal-body">
+                <div id="call-participant-info">
+                    <div id="call-participant-avatar"></div>
+                    <div id="call-participant-name"></div>
+                </div>
+                <div id="call-timer">00:00</div>
+                <div id="call-actions">
+                    <button onclick="toggleAudio()" id="mute-btn" title="Mute">🔇</button>
+                    <button onclick="toggleVideo()" id="camera-btn" title="Camera">📹</button>
+                    <button onclick="toggleScreenShare()" id="screen-btn" title="Screen Share">🖥️</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Call Invite Modal -->
+    <div id="call-invite-modal" class="modal">
+        <div class="modal-content call-modal-content">
+            <div class="modal-header">
+                <h3 id="invite-header-title">Incoming Call</h3>
+            </div>
+            <div class="modal-body call-modal-body">
+                <div id="invite-participant-info">
+                    <div id="invite-participant-avatar"></div>
+                    <div id="invite-participant-name"></div>
+                </div>
+                <div id="invite-actions">
+                    <button onclick="acceptCall()" class="btn-primary" id="accept-call-btn">Accept</button>
+                    <button onclick="rejectCall()" class="btn-secondary" id="reject-call-btn">Reject</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/webrtc/peer-connection.js"></script>
+    <script src="/webrtc/media-utils.js"></script>
+    <script src="/webrtc/call-manager.js"></script>
     <script src="/app.js"></script>
 </body>
 </html>

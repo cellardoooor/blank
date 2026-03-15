@@ -698,6 +698,172 @@ input::placeholder, textarea::placeholder {
     background: var(--gray-500);
 }
 
+/* ==================== CALL UI ==================== */
+
+#call-controls {
+    display: flex;
+    gap: 8px;
+}
+
+#call-controls button {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid var(--black);
+    font-size: 18px;
+    transition: var(--transition);
+}
+
+#call-controls button:hover {
+    background: var(--gray-200);
+}
+
+#call-controls button:active {
+    transform: scale(0.95);
+}
+
+/* Call Modal */
+.call-modal-content {
+    width: 360px;
+    max-height: 500px;
+}
+
+.call-modal-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+}
+
+#call-participant-info,
+#invite-participant-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+#call-participant-avatar,
+#invite-participant-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: var(--gray-200);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    border: 2px solid var(--black);
+}
+
+#call-participant-name,
+#invite-participant-name {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+#call-timer {
+    font-size: 24px;
+    font-weight: 600;
+    font-family: monospace;
+}
+
+#call-actions,
+#invite-actions {
+    display: flex;
+    gap: 16px;
+}
+
+#call-actions button,
+#invite-actions button {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 2px solid var(--black);
+    font-size: 24px;
+    transition: var(--transition);
+}
+
+#call-actions button:hover,
+#invite-actions button:hover {
+    background: var(--gray-200);
+}
+
+#call-actions button:active,
+#invite-actions button:active {
+    transform: scale(0.95);
+}
+
+#accept-call-btn {
+    background: var(--black);
+    color: var(--white);
+    border-color: var(--black);
+    width: 100px;
+}
+
+#accept-call-btn:hover {
+    background: var(--gray-700);
+}
+
+#reject-call-btn {
+    background: var(--white);
+    color: var(--black);
+    border-color: var(--black);
+    width: 100px;
+}
+
+#reject-call-btn:hover {
+    background: var(--gray-200);
+}
+
+#end-call-btn {
+    background: var(--white);
+    color: var(--black);
+    border-color: var(--black);
+}
+
+#end-call-btn:hover {
+    background: var(--gray-200);
+}
+
+/* Mute/Camera buttons */
+#mute-btn,
+#camera-btn,
+#screen-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 2px solid var(--black);
+    font-size: 24px;
+    transition: var(--transition);
+}
+
+#mute-btn:hover,
+#camera-btn:hover,
+#screen-btn:hover {
+    background: var(--gray-200);
+}
+
+#mute-btn:active,
+#camera-btn:active,
+#screen-btn:active {
+    transform: scale(0.95);
+}
+
+/* Call state indicators */
+.call-active #call-participant-name::after {
+    content: " • Active";
+    color: var(--gray-600);
+    font-size: 14px;
+}
+
+.call-incoming #invite-participant-name::after {
+    content: " • Incoming";
+    color: var(--gray-600);
+    font-size: 14px;
+}
+
 /* ==================== RESPONSIVE ==================== */
 
 @media (max-width: 768px) {

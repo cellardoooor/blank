@@ -52,9 +52,11 @@ func (a *App) Init(ctx context.Context, migrationsFS fs.FS) error {
 	// Initialize services with storage (may be nil)
 	var userRepo storage.UserRepository
 	var messageRepo storage.MessageRepository
+	var callRepo storage.CallRepository
 	if pgStorage != nil {
 		userRepo = pgStorage.User()
 		messageRepo = pgStorage.Message()
+		callRepo = pgStorage.Call()
 	}
 
 	// Initialize encryptor for message encryption
@@ -66,6 +68,11 @@ func (a *App) Init(ctx context.Context, migrationsFS fs.FS) error {
 	authService := auth.NewService(userRepo, a.config.JWTSecret, a.config.JWTDuration)
 	userService := service.NewUserService(userRepo)
 	messageService := service.NewMessageService(messageRepo, userRepo, encryptor)
+	callService, err := service.NewCallService(callRepo, userRepo, pgStorage)
+	if err != nil {
+		log.Printf("warning: failed to initialize call service: %v", err)
+		log.Println("call functionality will be unavailable")
+	}
 
 	// Create default user if configured
 	if a.config.DefaultUser != "" && a.config.DefaultPassword != "" {
@@ -77,11 +84,14 @@ func (a *App) Init(ctx context.Context, migrationsFS fs.FS) error {
 	a.hub = ws.NewHub()
 	go a.hub.Run()
 
-	httpHandler := httphandlers.NewHandler(authService, userService, messageService, a.config.CORSAllowed)
+	httpHandler := httphandlers.NewHandler(authService, userService, messageService, callService, a.config.CORSAllowed, a.config.ICEServers)
 	router := httpHandler.Router()
 
+	// Create CallSignaling for WebSocket call handling
+	callSignaling := ws.NewCallSignaling(a.hub, callService, userService, messageService, a.config.CallTimeout)
+
 	// Register WebSocket handler BEFORE static file catch-all
-	wsHandler := ws.NewHandler(a.hub, authService, messageService, userService)
+	wsHandler := ws.NewHandler(a.hub, authService, messageService, userService, callSignaling)
 	router.Handle("/ws", wsHandler)
 
 	// Static files handler - must be registered last (catch-all)

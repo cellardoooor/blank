@@ -46,6 +46,14 @@ let scrollState = {
     autoScrollTimeout: null
 };
 
+// Call state variables
+let callManager = null;
+let mediaUtils = null;
+let activeCall = null;
+let incomingCall = null;  // Store incoming call data
+let callTimerInterval = null;
+let callStartTime = null;
+
 // Favicon switching for unread messages
 const ORIGINAL_FAVICON = '/favicon.ico';
 const UNREAD_FAVICON = '/unread.ico';
@@ -366,6 +374,13 @@ function setupPing() {
 }
 
 function handleIncomingMessage(msg) {
+    // Handle call messages first
+    if (['call_start', 'call_offer', 'call_answer', 'call_ice_candidate', 
+         'call_join', 'call_leave', 'call_end', 'call_reject'].includes(msg.type)) {
+        handleCallMessage(msg);
+        return;
+    }
+    
     if (msg.type === 'read') {
         handleReadStatus(msg);
         return;
@@ -1509,6 +1524,360 @@ window.addEventListener('online', refreshAllData);
 // Setup scroll listeners when DOM is ready
 document.addEventListener('DOMContentLoaded', setupScrollListeners);
 }
+
+// ==================== CALL FUNCTIONS ====================
+
+// Initialize call manager and media utils
+// Returns true if initialization was successful, false otherwise
+function initCallManager() {
+    if (!ws) {
+        console.error('Cannot initialize call manager: WebSocket not connected');
+        return false;
+    }
+    
+    if (!callManager) {
+        try {
+            callManager = new CallManager(ws, userId);
+        } catch (err) {
+            console.error('Failed to create CallManager:', err);
+            return false;
+        }
+    }
+    
+    if (!mediaUtils) {
+        try {
+            mediaUtils = new MediaUtils();
+        } catch (err) {
+            console.error('Failed to create MediaUtils:', err);
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+// Start audio call
+async function startAudioCall() {
+    if (!currentChat) return;
+    
+    try {
+        if (!initCallManager()) {
+            alert('Unable to start call - please check your connection and refresh the page');
+            return;
+        }
+        
+        // Get local stream FIRST before creating call
+        const stream = await mediaUtils.getLocalStream('audio');
+        
+        // Start call with the acquired stream
+        const call = await callManager.startCall([currentChat], 'audio', stream);
+        activeCall = call;
+        
+        // Show call modal
+        showCallModal(currentChat, 'audio');
+        
+        // Start timer
+        startCallTimer();
+        
+    } catch (err) {
+        console.error('Failed to start audio call:', err);
+        alert('Failed to start call: ' + err.message);
+    }
+}
+
+// Start video call
+async function startVideoCall() {
+    if (!currentChat) return;
+    
+    try {
+        if (!initCallManager()) {
+            alert('Unable to start call - please check your connection and refresh the page');
+            return;
+        }
+        
+        // Get local stream FIRST before creating call
+        const stream = await mediaUtils.getLocalStream('video');
+        
+        // Start call with the acquired stream
+        const call = await callManager.startCall([currentChat], 'video', stream);
+        activeCall = call;
+        
+        // Show call modal
+        showCallModal(currentChat, 'video');
+        
+        // Start timer
+        startCallTimer();
+        
+    } catch (err) {
+        console.error('Failed to start video call:', err);
+        alert('Failed to start call: ' + err.message);
+    }
+}
+
+// Show call modal
+function showCallModal(participantId, callType) {
+    const modal = document.getElementById('call-modal');
+    const participantName = chats.get(participantId)?.username || 'User';
+    
+    document.getElementById('call-header-title').textContent = callType === 'video' ? 'Video Call' : 'Audio Call';
+    document.getElementById('call-participant-name').textContent = participantName;
+    
+    modal.classList.add('active');
+    document.getElementById('active-chat').classList.add('hidden');
+}
+
+// Show call invite modal
+function showCallInviteModal(callerId, callType) {
+    const modal = document.getElementById('call-invite-modal');
+    const callerName = chats.get(callerId)?.username || 'User';
+    
+    document.getElementById('invite-header-title').textContent = callType === 'video' ? 'Incoming Video Call' : 'Incoming Audio Call';
+    document.getElementById('invite-participant-name').textContent = callerName;
+    
+    modal.classList.add('active');
+}
+
+// End call
+function endCall() {
+    if (activeCall && callManager) {
+        callManager.endCall();
+        activeCall = null;
+    }
+    
+    // Close modal
+    document.getElementById('call-modal').classList.remove('active');
+    document.getElementById('call-invite-modal').classList.remove('active');
+    
+    // Stop timer
+    stopCallTimer();
+    
+    // Stop local stream
+    if (mediaUtils) {
+        mediaUtils.stopLocalStream();
+    }
+    
+    // Show chat
+    if (currentChat) {
+        document.getElementById('active-chat').classList.remove('hidden');
+    }
+}
+
+// Accept call
+async function acceptCall() {
+    if (!incomingCall || !callManager) {
+        return;
+    }
+    
+    try {
+        // Initialize media utils if needed
+        if (!mediaUtils) {
+            mediaUtils = new MediaUtils();
+        }
+        
+        // Get local stream BEFORE joining the call
+        // This ensures we have media available when the offer arrives
+        const stream = await mediaUtils.getLocalStream(incomingCall.callType);
+        
+        // Join the call
+        await callManager.joinCall(incomingCall.callId);
+        activeCall = incomingCall;
+        
+        // Clear incoming call
+        incomingCall = null;
+        
+        // Close modal
+        document.getElementById('call-invite-modal').classList.remove('active');
+        
+        // Show call modal
+        showCallModal(activeCall.callerId, activeCall.callType);
+        startCallTimer();
+    } catch (err) {
+        console.error('Failed to join call:', err);
+        alert('Failed to join call: ' + err.message);
+        incomingCall = null;
+        document.getElementById('call-invite-modal').classList.remove('active');
+    }
+}
+
+// Reject call
+function rejectCall() {
+    if (incomingCall && callManager) {
+        callManager.rejectCall(incomingCall.callId);
+        incomingCall = null;
+    }
+    
+    // Close modal
+    document.getElementById('call-invite-modal').classList.remove('active');
+}
+
+// Toggle audio
+function toggleAudio() {
+    if (mediaUtils) {
+        const enabled = mediaUtils.toggleAudio();
+        const btn = document.getElementById('mute-btn');
+        btn.textContent = enabled ? '🔇' : '🔊';
+        btn.title = enabled ? 'Mute' : 'Unmute';
+    }
+}
+
+// Toggle video
+function toggleVideo() {
+    if (mediaUtils) {
+        const enabled = mediaUtils.toggleVideo();
+        const btn = document.getElementById('camera-btn');
+        btn.textContent = enabled ? '📹' : '📷';
+        btn.title = enabled ? 'Camera On' : 'Camera Off';
+    }
+}
+
+// Toggle screen share
+function toggleScreenShare() {
+    // Screen share implementation
+    console.log('Screen share toggle');
+}
+
+// Start call timer
+function startCallTimer() {
+    stopCallTimer();
+    callStartTime = Date.now();
+    callTimerInterval = setInterval(updateCallTimer, 1000);
+}
+
+// Update call timer display
+function updateCallTimer() {
+    if (!callStartTime) return;
+    
+    const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
+    const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const seconds = (elapsed % 60).toString().padStart(2, '0');
+    
+    document.getElementById('call-timer').textContent = `${minutes}:${seconds}`;
+}
+
+// Stop call timer
+function stopCallTimer() {
+    if (callTimerInterval) {
+        clearInterval(callTimerInterval);
+        callTimerInterval = null;
+    }
+    callStartTime = null;
+    document.getElementById('call-timer').textContent = '00:00';
+}
+
+// Handle incoming call messages
+function handleCallMessage(msg) {
+    // Initialize CallManager if not already done
+    if (!callManager) {
+        initCallManager();
+    }
+    if (!callManager) {
+        console.error('WebRTC not supported or WebSocket not connected');
+        // Show user-friendly error for all call message types
+        const isIncomingCall = msg.type === 'call_start' && msg.caller_id !== userId;
+        const isCallResponse = ['call_offer', 'call_answer', 'call_ice_candidate'].includes(msg.type);
+        if (isIncomingCall || isCallResponse) {
+            alert('Unable to handle call - please check your connection and refresh the page');
+        }
+        return;
+    }
+    
+    switch (msg.type) {
+        case 'call_start':
+            // Handle call_start - update call ID for caller, show invite for callee
+            callManager.handleCallStart(msg);
+            // Only show invite modal if we're not the caller
+            if (msg.caller_id !== userId) {
+                incomingCall = {
+                    callId: msg.call_id,
+                    callerId: msg.caller_id,
+                    callType: msg.call_type
+                };
+                showCallInviteModal(msg.caller_id, msg.call_type);
+            }
+            break;
+        case 'call_offer':
+            if (!incomingCall) {
+                incomingCall = {
+                    callId: msg.call_id,
+                    callerId: msg.caller_id,
+                    callType: msg.call_type
+                };
+            }
+            callManager.handleOffer(msg);
+            break;
+        case 'call_answer':
+            callManager.handleAnswer(msg);
+            break;
+        case 'call_ice_candidate':
+            callManager.handleIceCandidate(msg);
+            break;
+        case 'call_join':
+            // Handle call join - another participant joined the call
+            console.log('User joined call:', msg.user_id);
+            // Update UI to show participant joined (could show a notification)
+            if (activeCall && callManager) {
+                // Add participant to active call tracking
+                const participantName = chats.get(msg.user_id)?.username || 'User';
+                console.log(`${participantName} joined the call`);
+            }
+            break;
+        case 'call_leave':
+            // Handle call leave - another participant left the call
+            console.log('User left call:', msg.user_id);
+            if (activeCall && callManager && callManager.peerConnections) {
+                const participantName = chats.get(msg.user_id)?.username || 'User';
+                console.log(`${participantName} left the call`);
+                // Close peer connection for this participant
+                callManager.peerConnections.delete(msg.user_id);
+            }
+            break;
+        case 'call_end':
+            endCall();
+            break;
+        case 'call_reject':
+            endCall();
+            break;
+        default:
+            console.warn('Unknown call message type:', msg.type);
+    }
+}
+
+// Setup call event listeners
+function setupCallEventListeners() {
+    // Listen for ICE candidates
+    window.addEventListener('iceCandidate', (e) => {
+        if (callManager) {
+            callManager.sendIceCandidate(e.detail.userId, e.detail.candidate);
+        }
+    });
+    
+    // Listen for remote streams
+    window.addEventListener('remoteStream', (e) => {
+        const videoEl = document.getElementById('remote-video-' + e.detail.userId);
+        if (videoEl) {
+            videoEl.srcObject = e.detail.stream;
+        }
+    });
+    
+    // Listen for connection state changes
+    window.addEventListener('connectionState', (e) => {
+        console.log('Connection state:', e.detail.state);
+    });
+}
+
+// Setup call event listeners when DOM is ready
+document.addEventListener('DOMContentLoaded', setupCallEventListeners);
+
+// Cleanup call state on page unload
+window.addEventListener('beforeunload', () => {
+    if (activeCall && callManager) {
+        callManager.endCall();
+    }
+    if (mediaUtils) {
+        mediaUtils.stopLocalStream();
+    }
+    incomingCall = null;
+});
 
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {

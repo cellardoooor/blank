@@ -20,15 +20,19 @@ type Handler struct {
 	authService    *auth.Service
 	userService    *service.UserService
 	messageService *service.MessageService
+	callService    *service.CallService
 	corsAllowed    []string
+	iceServers     string
 }
 
-func NewHandler(authSvc *auth.Service, userSvc *service.UserService, msgSvc *service.MessageService, corsAllowed []string) *Handler {
+func NewHandler(authSvc *auth.Service, userSvc *service.UserService, msgSvc *service.MessageService, callSvc *service.CallService, corsAllowed []string, iceServers string) *Handler {
 	return &Handler{
 		authService:    authSvc,
 		userService:    userSvc,
 		messageService: msgSvc,
+		callService:    callSvc,
 		corsAllowed:    corsAllowed,
+		iceServers:     iceServers,
 	}
 }
 
@@ -52,6 +56,15 @@ func (h *Handler) Router() *mux.Router {
 	api.HandleFunc("/chats", h.getChats).Methods("GET")
 	api.HandleFunc("/messages", h.sendMessage).Methods("POST")
 	api.HandleFunc("/messages/{user_id}", h.getMessages).Methods("GET")
+
+	// Call endpoints
+	api.HandleFunc("/calls", h.createCall).Methods("POST")
+	api.HandleFunc("/calls/{id}", h.getCall).Methods("GET")
+	api.HandleFunc("/calls/{id}/join", h.joinCall).Methods("POST")
+	api.HandleFunc("/calls/{id}/leave", h.leaveCall).Methods("POST")
+	api.HandleFunc("/calls/{id}/end", h.endCall).Methods("POST")
+	api.HandleFunc("/calls/history", h.getCallHistory).Methods("GET")
+	api.HandleFunc("/calls/ice-config", h.getICEConfig).Methods("GET")
 
 	return r
 }
@@ -420,4 +433,196 @@ func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"message": "password changed successfully"})
+}
+
+type CreateCallRequest struct {
+	CallType     string   `json:"call_type"`
+	Participants []string `json:"participants"`
+}
+
+func (h *Handler) createCall(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	var req CreateCallRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+
+	// Parse participant IDs
+	participantIDs := make([]uuid.UUID, 0, len(req.Participants))
+	for _, pid := range req.Participants {
+		parsedID, err := uuid.Parse(pid)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "invalid participant id")
+			return
+		}
+		participantIDs = append(participantIDs, parsedID)
+	}
+
+	// Validate call type
+	callType := model.CallType(req.CallType)
+	if callType != model.CallTypeAudio && callType != model.CallTypeVideo {
+		callType = model.CallTypeAudio
+	}
+
+	// Create call
+	call, err := h.callService.CreateCall(r.Context(), userID, callType, participantIDs)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusCreated, map[string]interface{}{
+		"id":          call.ID,
+		"call_type":   call.CallType,
+		"status":      call.Status,
+		"initiator_id": call.InitiatorID,
+		"created_at":  call.CreatedAt.Format(time.RFC3339),
+	})
+}
+
+func (h *Handler) getCall(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	vars := mux.Vars(r)
+	callID, err := uuid.Parse(vars["id"])
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid call id")
+		return
+	}
+
+	callInfo, err := h.callService.GetCall(r.Context(), callID)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Check if user is a participant
+	isParticipant := false
+	for _, p := range callInfo.Participants {
+		if p.UserID == userID {
+			isParticipant = true
+			break
+		}
+	}
+	if !isParticipant {
+		respondError(w, http.StatusForbidden, "not a participant of this call")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, callInfo)
+}
+
+func (h *Handler) joinCall(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	vars := mux.Vars(r)
+	callID, err := uuid.Parse(vars["id"])
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid call id")
+		return
+	}
+
+	if err := h.callService.JoinCall(r.Context(), callID, userID); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "joined call successfully"})
+}
+
+func (h *Handler) leaveCall(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	vars := mux.Vars(r)
+	callID, err := uuid.Parse(vars["id"])
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid call id")
+		return
+	}
+
+	if err := h.callService.LeaveCall(r.Context(), callID, userID); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "left call successfully"})
+}
+
+func (h *Handler) endCall(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	vars := mux.Vars(r)
+	callID, err := uuid.Parse(vars["id"])
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid call id")
+		return
+	}
+
+	if err := h.callService.EndCall(r.Context(), callID, userID); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"message": "call ended successfully"})
+}
+
+func (h *Handler) getCallHistory(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	limit := 50
+	offset := 0
+
+	history, err := h.callService.GetCallHistory(r.Context(), userID, limit, offset)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to get call history")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, history)
+}
+
+func (h *Handler) getICEConfig(w http.ResponseWriter, r *http.Request) {
+	// Default ICE servers (public STUN servers only - no credentials)
+	defaultICEServers := []map[string]interface{}{
+		{"urls": "stun:stun.l.google.com:19302"},
+		{"urls": "stun:stun1.l.google.com:19302"},
+	}
+
+	var iceServers []map[string]interface{}
+
+	if h.iceServers != "" {
+		// Parse and validate the ICE servers configuration
+		if err := json.Unmarshal([]byte(h.iceServers), &iceServers); err != nil {
+			log.Printf("invalid ICE_SERVERS config, using defaults: %v", err)
+			iceServers = defaultICEServers
+		} else {
+			// Security: Remove credentials from ICE servers before sending to clients
+			// Only return urls, username, and credential for TURN servers that require them
+			// For STUN servers, only return urls (they don't need credentials)
+			sanitizedServers := make([]map[string]interface{}, 0, len(iceServers))
+			for _, server := range iceServers {
+				sanitized := make(map[string]interface{})
+				if urls, ok := server["urls"]; ok {
+					sanitized["urls"] = urls
+				}
+				// Only include username/credential for TURN servers (they have credential fields)
+				// This allows TURN servers to work while not exposing unnecessary credential info
+				// Note: In production, consider using time-limited TURN credentials
+				if username, ok := server["username"]; ok && username != "" {
+					sanitized["username"] = username
+				}
+				if credential, ok := server["credential"]; ok && credential != "" {
+					sanitized["credential"] = credential
+				}
+				sanitizedServers = append(sanitizedServers, sanitized)
+			}
+			iceServers = sanitizedServers
+		}
+	} else {
+		iceServers = defaultICEServers
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{"iceServers": iceServers})
 }

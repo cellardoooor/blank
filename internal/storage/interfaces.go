@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"messenger/internal/model"
@@ -10,6 +11,7 @@ import (
 type UserRepository interface {
 	Create(ctx context.Context, user *model.User) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.User, error)
+	GetByIDs(ctx context.Context, ids []uuid.UUID) ([]model.User, error)
 	GetByUsername(ctx context.Context, username string) (*model.User, error)
 	GetAll(ctx context.Context) ([]model.User, error)
 	SearchUsers(ctx context.Context, prefix string) ([]model.User, error)
@@ -31,6 +33,27 @@ type ChatInfo struct {
 	PartnerID   uuid.UUID
 	LastMessage *model.Message
 	UnreadCount int
+}
+
+type CallRepository interface {
+	Create(ctx context.Context, call *model.Call) error
+	GetByID(ctx context.Context, id uuid.UUID) (*model.Call, error)
+	GetByStatus(ctx context.Context, status string) ([]model.Call, error)
+	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
+	UpdateStartedAt(ctx context.Context, id uuid.UUID, startedAt *time.Time) error
+	UpdateEndedAt(ctx context.Context, id uuid.UUID, endedAt *time.Time) error
+	Delete(ctx context.Context, id uuid.UUID) error
+
+	CreateParticipant(ctx context.Context, participant *model.CallParticipant) error
+	GetParticipantsByCallID(ctx context.Context, callID uuid.UUID) ([]model.CallParticipant, error)
+	GetParticipant(ctx context.Context, callID, userID uuid.UUID) (*model.CallParticipant, error)
+	UpdateParticipantStatus(ctx context.Context, callID, userID uuid.UUID, status string) error
+	UpdateParticipantJoinedAt(ctx context.Context, callID, userID uuid.UUID, joinedAt *time.Time) error
+	UpdateParticipantLeftAt(ctx context.Context, callID, userID uuid.UUID, leftAt *time.Time) error
+	UpdateParticipantMediaSettings(ctx context.Context, callID, userID uuid.UUID, audioEnabled, videoEnabled bool) error
+	DeleteParticipant(ctx context.Context, callID, userID uuid.UUID) error
+
+	GetCallHistory(ctx context.Context, userID uuid.UUID, limit, offset int) ([]model.CallHistoryItem, error)
 }
 
 type TransactionManager interface {

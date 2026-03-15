@@ -17,6 +17,8 @@ type Config struct {
 	DefaultPassword string
 	CORSAllowed     []string
 	EncryptionKey   string
+	ICEServers      string
+	CallTimeout     time.Duration
 }
 
 type DatabaseConfig struct {
@@ -53,6 +55,8 @@ func Load() *Config {
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		EncryptionKey: getEnv("ENCRYPTION_KEY", ""),
+		ICEServers:    getEnv("ICE_SERVERS", ""),
+		CallTimeout:   parseDuration(getEnv("CALL_TIMEOUT", "5s")),
 	}
 }
 

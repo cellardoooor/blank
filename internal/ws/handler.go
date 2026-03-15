@@ -29,9 +29,18 @@ type Client struct {
 	sendReadStatus     chan ReadStatus
 	sendDeliveryStatus chan DeliveryStatus
 	sendTypingStatus   chan TypingStatus
+	sendCallStart      chan CallStart
+	sendCallOffer      chan CallOffer
+	sendCallAnswer     chan CallAnswer
+	sendCallIceCandidate chan CallIceCandidate
+	sendCallJoin       chan CallJoin
+	sendCallLeave      chan CallLeave
+	sendCallEnd        chan CallEnd
+	sendCallReject     chan CallReject
 	userID             uuid.UUID
 	messageService     *service.MessageService
 	userService        *service.UserService
+	callSignaling      *CallSignaling
 }
 
 type Handler struct {
@@ -39,14 +48,16 @@ type Handler struct {
 	authService    *auth.Service
 	messageService *service.MessageService
 	userService    *service.UserService
+	callSignaling  *CallSignaling
 }
 
-func NewHandler(hub *Hub, authSvc *auth.Service, msgSvc *service.MessageService, userSvc *service.UserService) *Handler {
+func NewHandler(hub *Hub, authSvc *auth.Service, msgSvc *service.MessageService, userSvc *service.UserService, callSig *CallSignaling) *Handler {
 	return &Handler{
 		hub:            hub,
 		authService:    authSvc,
 		messageService: msgSvc,
 		userService:    userSvc,
+		callSignaling:  callSig,
 	}
 }
 
@@ -69,15 +80,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &Client{
-		hub:                h.hub,
-		conn:               conn,
-		send:               make(chan Message, 256),
-		sendReadStatus:     make(chan ReadStatus, 256),
-		sendDeliveryStatus: make(chan DeliveryStatus, 256),
-		sendTypingStatus:   make(chan TypingStatus, 256),
-		userID:             userID,
-		messageService:     h.messageService,
-		userService:        h.userService,
+		hub:                  h.hub,
+		conn:                 conn,
+		send:                 make(chan Message, 256),
+		sendReadStatus:       make(chan ReadStatus, 256),
+		sendDeliveryStatus:   make(chan DeliveryStatus, 256),
+		sendTypingStatus:     make(chan TypingStatus, 256),
+		sendCallStart:        make(chan CallStart, 256),
+		sendCallOffer:        make(chan CallOffer, 256),
+		sendCallAnswer:       make(chan CallAnswer, 256),
+		sendCallIceCandidate: make(chan CallIceCandidate, 256),
+		sendCallJoin:         make(chan CallJoin, 256),
+		sendCallLeave:        make(chan CallLeave, 256),
+		sendCallEnd:          make(chan CallEnd, 256),
+		sendCallReject:       make(chan CallReject, 256),
+		userID:               userID,
+		messageService:       h.messageService,
+		userService:          h.userService,
+		callSignaling:        h.callSignaling,
 	}
 
 	h.hub.Register(client)
@@ -178,6 +198,52 @@ func (c *Client) readPump() {
 				Text:       text,
 			})
 			continue
+		}
+
+		// Call signaling messages
+		if msgType, ok := rawMsg["type"].(string); ok {
+			switch msgType {
+			case "call_start":
+				if c.callSignaling != nil {
+					c.callSignaling.HandleCallStart(c, data)
+				}
+				continue
+			case "call_offer":
+				if c.callSignaling != nil {
+					c.callSignaling.HandleCallOffer(c, data)
+				}
+				continue
+			case "call_answer":
+				if c.callSignaling != nil {
+					c.callSignaling.HandleCallAnswer(c, data)
+				}
+				continue
+			case "call_ice_candidate":
+				if c.callSignaling != nil {
+					c.callSignaling.HandleCallIceCandidate(c, data)
+				}
+				continue
+			case "call_join":
+				if c.callSignaling != nil {
+					c.callSignaling.HandleCallJoin(c, data)
+				}
+				continue
+			case "call_leave":
+				if c.callSignaling != nil {
+					c.callSignaling.HandleCallLeave(c, data)
+				}
+				continue
+			case "call_end":
+				if c.callSignaling != nil {
+					c.callSignaling.HandleCallEnd(c, data)
+				}
+				continue
+			case "call_reject":
+				if c.callSignaling != nil {
+					c.callSignaling.HandleCallReject(c, data)
+				}
+				continue
+			}
 		}
 
 		var msg Message
@@ -357,6 +423,102 @@ func (c *Client) writePump() {
 			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 
 			data, err := json.Marshal(typing)
+			if err != nil {
+				continue
+			}
+
+			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+
+		case start := <-c.sendCallStart:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+			data, err := json.Marshal(start)
+			if err != nil {
+				continue
+			}
+
+			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+
+		case offer := <-c.sendCallOffer:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+			data, err := json.Marshal(offer)
+			if err != nil {
+				continue
+			}
+
+			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+
+		case answer := <-c.sendCallAnswer:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+			data, err := json.Marshal(answer)
+			if err != nil {
+				continue
+			}
+
+			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+
+		case ice := <-c.sendCallIceCandidate:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+			data, err := json.Marshal(ice)
+			if err != nil {
+				continue
+			}
+
+			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+
+		case join := <-c.sendCallJoin:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+			data, err := json.Marshal(join)
+			if err != nil {
+				continue
+			}
+
+			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+
+		case leave := <-c.sendCallLeave:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+			data, err := json.Marshal(leave)
+			if err != nil {
+				continue
+			}
+
+			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+
+		case end := <-c.sendCallEnd:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+			data, err := json.Marshal(end)
+			if err != nil {
+				continue
+			}
+
+			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+				return
+			}
+
+		case reject := <-c.sendCallReject:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+			data, err := json.Marshal(reject)
 			if err != nil {
 				continue
 			}
