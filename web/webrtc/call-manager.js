@@ -380,10 +380,7 @@ class CallManager {
     console.log('Creating answer, connection state:', pc.connection.connectionState);
     const answer = await pc.createAnswer();
     console.log('Answer created:', answer);
-
-    // Set local description (MUST await - ICE candidates are generated after this)
-    // This is critical: ICE candidates are only generated after setLocalDescription completes
-    await pc.connection.setLocalDescription(answer);
+    // Note: createAnswer() already calls setLocalDescription internally
 
     // Send answer to caller
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
